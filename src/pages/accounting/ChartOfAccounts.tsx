@@ -58,12 +58,12 @@ export default function ChartOfAccountsPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">دليل الحسابات</h2>
           <p className="text-gray-500 mt-1">هيكلة الحسابات المالية وتصنيفاتها الشجرية</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 w-full sm:w-auto">
            <button className="bg-white text-gray-700 px-6 py-3 rounded-2xl border border-gray-100 font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-green-600" />
               تصدير إكسل

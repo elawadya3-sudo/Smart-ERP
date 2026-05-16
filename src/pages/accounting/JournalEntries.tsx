@@ -31,7 +31,7 @@ export default function JournalEntriesPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">قيود اليومية</h2>
           <p className="text-gray-500 mt-1">إدارة واعتماد جميع العمليات المالية والمحاسبية</p>
@@ -43,7 +43,7 @@ export default function JournalEntriesPage() {
       </div>
 
       <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden min-h-[600px]">
-         <div className="p-8 border-b border-gray-50 bg-gray-50/20 flex gap-4">
+         <div className="p-8 border-b border-gray-50 bg-gray-50/20 flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
                <Search className="absolute right-4 top-3.5 w-5 h-5 text-gray-400" />
                <input 
@@ -52,7 +52,7 @@ export default function JournalEntriesPage() {
                   className="w-full bg-white border border-gray-200 rounded-2xl pr-12 pl-4 py-3.5 text-sm font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                />
             </div>
-            <button className="bg-white border border-gray-200 px-6 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-gray-50 transition-colors">
+            <button className="bg-white border border-gray-200 px-6 py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors w-full sm:w-auto">
                <Filter className="w-4 h-4 text-gray-400" />
                تصفية متقدمة
             </button>

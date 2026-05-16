@@ -22,11 +22,11 @@ export default function Login() {
     setError(null);
     try {
       const finalEmail = email.includes('@') ? email : `${email}@system.local`;
-      
+
       if (isRegistering) {
         const result = await createUserWithEmailAndPassword(auth, finalEmail, password);
         const user = result.user;
-        
+
         // Create user doc in firestore
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
@@ -50,7 +50,7 @@ export default function Login() {
           }
         }
       }
-      
+
       navigate(from, { replace: true });
     } catch (err: any) {
       console.error("Auth Error:", err);
@@ -64,7 +64,7 @@ export default function Login() {
       } else if (err.code === 'auth/too-many-requests') {
         errorMsg = "تم حظر الدخول مؤقتاً لسبب كثرة المحاولات. حاول لاحقاً.";
       }
-      
+
       setError(isRegistering ? "خطأ في إنشاء الحساب. قد يكون اسم المستخدم مستخدماً بالفعل." : errorMsg);
     } finally {
       setLoading(false);
@@ -102,10 +102,10 @@ export default function Login() {
       } else if (userSnap && userSnap.exists()) {
         const userData = userSnap.data();
         if (userData.isActive === false) {
-           setError("هذا الحساب معطل. يرجى مراجعة الإدارة.");
-           await auth.signOut();
-           setLoading(false);
-           return;
+          setError("هذا الحساب معطل. يرجى مراجعة الإدارة.");
+          await auth.signOut();
+          setLoading(false);
+          return;
         }
       }
 
@@ -119,7 +119,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir="rtl">
-      <motion.div 
+      <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="max-w-md w-full bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-2xl shadow-blue-100/50"
@@ -140,8 +140,8 @@ export default function Login() {
           )}
           <div className="space-y-2">
             <label className="text-sm font-bold text-gray-400 uppercase tracking-widest block px-1">اسم المستخدم</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin"
@@ -151,8 +151,8 @@ export default function Login() {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-bold text-gray-400 uppercase tracking-widest block px-1">كلمة المرور</label>
-            <input 
-              type="password" 
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -160,8 +160,8 @@ export default function Login() {
               required
             />
           </div>
-          
-          <button 
+
+          <button
             type="submit"
             disabled={loading}
             className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5 transition-all mt-4 disabled:opacity-50"
@@ -169,33 +169,7 @@ export default function Login() {
             {loading ? 'جاري التحميل...' : (isRegistering ? 'إنشاء حساب مسؤول' : 'دخول للنظام')}
           </button>
 
-          <div className="text-center mt-4">
-            <button 
-              type="button"
-              onClick={() => setIsRegistering(!isRegistering)}
-              className="text-sm font-bold text-blue-600 hover:underline"
-            >
-              {isRegistering ? 'لديك حساب بالفعل؟ دخول' : 'ليس لديك حساب؟ إنشاء مسؤول جديد'}
-            </button>
-          </div>
 
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-100"></div>
-            </div>
-            <div className="relative flex justify-center text-sm uppercase">
-              <span className="bg-white px-4 text-gray-400 font-bold tracking-widest">أو عبر</span>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="w-full bg-white border border-gray-200 text-gray-700 font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-50 transition-all group"
-          >
-            <Chrome className="w-5 h-5 text-blue-500" />
-            {loading ? 'جاري التحميل...' : 'تسجيل الدخول باستخدام Google'}
-          </button>
         </form>
 
         <p className="text-center mt-10 text-sm text-gray-400 font-medium">

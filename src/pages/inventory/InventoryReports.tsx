@@ -97,7 +97,7 @@ export default function InventoryReportsPage() {
                 <button className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">طباعة التقرير</button>
               </div>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
               <table className="w-full text-right text-sm">
                 <thead className="bg-gray-50 text-sm text-gray-400 uppercase font-black tracking-widest">
                   <tr className="border-b border-gray-100">
@@ -148,7 +148,7 @@ export default function InventoryReportsPage() {
                 <p className="text-2xl font-black text-white leading-none">{formatCurrency(totalRetailValue - totalCostValue)}</p>
               </div>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
               <table className="w-full text-right text-sm">
                 <thead className="bg-gray-50 text-sm text-gray-400 uppercase font-black">
                   <tr className="border-b border-gray-100">
@@ -225,7 +225,7 @@ export default function InventoryReportsPage() {
                 </div>
               </div>
             ))}
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
                <div className="px-8 py-5 border-b border-gray-50 bg-gray-50/20">
                   <h5 className="text-sm font-bold text-gray-700">سجل التحركات الأخيرة لهذا الصنف</h5>
                </div>
@@ -285,7 +285,7 @@ export default function InventoryReportsPage() {
                    <p className="text-2xl font-black text-gray-900">5 <span className="text-sm font-medium text-gray-400">صنف</span></p>
                 </div>
              </div>
-             <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+             <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
                 <table className="w-full text-right text-sm">
                    <thead className="bg-gray-50 text-sm text-gray-400 font-black tracking-widest uppercase">
                       <tr className="border-b border-gray-100">
@@ -319,7 +319,7 @@ export default function InventoryReportsPage() {
               <h3 className="text-xl font-bold text-gray-900">تقرير أوامر شغل</h3>
               <button className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-blue-100">+ أمر شغل جديد</button>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
               <table className="w-full text-right text-sm">
                 <thead className="bg-gray-50 text-sm text-gray-400 uppercase font-black">
                   <tr className="border-b border-gray-100 tracking-widest">
@@ -360,7 +360,7 @@ export default function InventoryReportsPage() {
                 <div className="bg-green-50 text-green-600 px-4 py-1 rounded-full text-sm font-black uppercase">متوفر: 120 مسلسل</div>
               </div>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
               <table className="w-full text-right text-sm">
                 <thead className="bg-gray-50 text-sm text-gray-400 uppercase font-black">
                   <tr className="border-b border-gray-100 tracking-widest">
@@ -471,7 +471,7 @@ export default function InventoryReportsPage() {
               <h3 className="text-xl font-bold text-gray-900">تقرير مجمع مبيعات الأصناف</h3>
               <button className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-blue-100">تحميل ملف CSV</button>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-x-auto shadow-sm">
               <div className="p-8 border-b border-gray-50">
                  <div className="flex items-center gap-8">
                     <div className="flex-1 h-32 bg-gray-50 rounded-2xl flex flex-col items-center justify-center">
@@ -536,9 +536,9 @@ export default function InventoryReportsPage() {
   };
 
   return (
-    <div className="flex gap-8 h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="flex flex-col md:flex-row gap-4 md:gap-8 h-[calc(100vh-100px)] md:h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Sidebar Menu */}
-      <div className="w-80 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+      <div className="w-full md:w-80 min-h-[300px] bg-white rounded-[2rem] md:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col shrink-0 overflow-hidden">
          <div className="p-8 border-b border-gray-50">
             <h2 className="text-xl font-bold text-gray-900 mb-1">مركز التقارير</h2>
             <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">اختر التقرير المطلوب عرضه</p>

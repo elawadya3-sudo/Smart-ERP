@@ -68,17 +68,17 @@ function StatCard({ title, value, change, trend, icon: Icon, color }: any) {
 export default function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 tracking-tight">لوحة التحكم</h2>
           <p className="text-gray-500 mt-1">مرحباً بك، إليك ملخص مبيعات اليوم</p>
         </div>
-        <div className="flex gap-3">
-          <button className="bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 font-medium text-sm flex items-center gap-2 hover:bg-gray-50 shadow-sm transition-all">
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+          <button className="flex-1 sm:flex-none justify-center bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 font-medium text-sm flex items-center gap-2 hover:bg-gray-50 shadow-sm transition-all min-h-[44px]">
             <Clock className="w-4 h-4" />
             آخر 7 أيام
           </button>
-          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">
+          <button className="flex-1 sm:flex-none justify-center bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all min-h-[44px]">
             تصدير تقرير
           </button>
         </div>

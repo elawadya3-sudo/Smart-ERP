@@ -321,7 +321,7 @@ export default function POS() {
   };
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col gap-6" dir="rtl">
+    <div className="h-[calc(100vh-100px)] lg:h-[calc(100vh-140px)] flex flex-col gap-4 lg:gap-6" dir="rtl">
       {/* Top Header */}
       <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm relative overflow-hidden group">
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 opacity-30"></div>
@@ -370,9 +370,9 @@ export default function POS() {
           </div>
         </div>
 
-      <div className="flex-1 flex gap-8 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-8 overflow-hidden">
         {/* Products Selection Section - (Same style as before but with branch specific data) */}
-        <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col gap-4 lg:gap-6 overflow-hidden">
           <div className="relative">
             <Search className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 font-bold" />
             <input
@@ -417,7 +417,7 @@ export default function POS() {
         </div>
 
         {/* Sidebar Section: Cart */}
-        <div className="w-96 bg-white rounded-[3rem] border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.05)] flex flex-col overflow-hidden">
+        <div className="w-full lg:w-96 bg-white rounded-[2rem] lg:rounded-[3rem] border border-gray-100 shadow-sm lg:shadow-[0_20px_50px_rgba(0,0,0,0.05)] flex flex-col flex-1 lg:flex-auto min-h-[40vh] lg:min-h-0 overflow-hidden">
           <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-100">
@@ -530,7 +530,7 @@ export default function POS() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-lg bg-white rounded-[3rem] p-12 shadow-2xl overflow-hidden text-center"
+              className="relative w-full max-w-lg bg-white rounded-[2rem] lg:rounded-[3rem] p-6 lg:p-12 shadow-2xl overflow-hidden text-center"
               dir="rtl"
             >
               <h3 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">طريقة الدفع</h3>
@@ -578,7 +578,7 @@ export default function POS() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-xl bg-white rounded-[3rem] p-12 shadow-2xl overflow-hidden" dir="rtl"
+              className="relative w-full max-w-xl bg-white rounded-[2rem] lg:rounded-[3rem] p-6 lg:p-12 shadow-2xl overflow-hidden" dir="rtl"
             >
               <div className="text-center mb-10">
                 <h3 className="text-3xl font-black text-gray-900 mb-2">إغلاق الوردية الحالية</h3>

@@ -41,12 +41,12 @@ export default function Settings() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">إعدادات النظام</h2>
           <p className="text-gray-500 mt-1">تخصيص هوية المتجر والخيارات المتقدمة</p>
         </div>
-        <button className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 flex items-center gap-2 hover:bg-blue-700 transition-all">
+        <button className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all w-full sm:w-auto">
           <Save className="w-5 h-5" />
           حفظ التغييرات
         </button>

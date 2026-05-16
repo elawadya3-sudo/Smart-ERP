@@ -22,12 +22,12 @@ export default function CashTransactionsPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">العمليات النقدية</h2>
           <p className="text-gray-500 mt-1">إدارة الصيرفة، القبض، والدفع النقدي</p>
         </div>
-        <div className="flex gap-2 bg-gray-100 p-1.5 rounded-2xl">
+        <div className="flex flex-wrap gap-2 bg-gray-100 p-1.5 rounded-2xl w-full sm:w-auto">
            <button 
              onClick={() => setActiveTab('RECEIPT')}
              className={cn(
@@ -74,7 +74,7 @@ export default function CashTransactionsPage() {
 
          <div className="lg:col-span-3">
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden min-h-[500px]">
-               <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/20">
+               <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/20">
                   <div className="flex items-center gap-3">
                      <History className="w-5 h-5 text-gray-400" />
                      <h4 className="font-bold text-gray-900">سجل {activeTab === 'RECEIPT' ? 'المقبوضات' : 'المدفوعات'} الأخيرة</h4>

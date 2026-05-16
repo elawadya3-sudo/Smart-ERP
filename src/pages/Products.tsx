@@ -65,7 +65,7 @@ export default function Products() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 tracking-tight">إدارة المنتجات والأصناف</h2>
           <p className="text-gray-500 mt-1">عرض وإدارة مخزونك من الأحذية والماركات والتصنيفات</p>
@@ -123,7 +123,7 @@ export default function Products() {
             className="w-full bg-gray-50 border-none rounded-2xl pr-12 pl-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 outline-none transition-all"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button className="bg-white border border-gray-100 p-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-blue-600 transition-all">
             <Filter className="w-5 h-5" />
           </button>
@@ -136,7 +136,7 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
         <table className="w-full text-right">
           <thead>
             <tr className="bg-gray-50 text-sm text-gray-400 uppercase font-black border-b border-gray-100">

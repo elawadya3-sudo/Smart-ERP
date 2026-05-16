@@ -65,12 +65,12 @@ export default function InventoryDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 tracking-tight">إدارة المخزون</h2>
           <p className="text-gray-500 mt-1">نظام إدارة المستودعات وحركات المخزون المتكاملة</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
           <Link to="/inventory/products" className="bg-white text-blue-600 px-5 py-2.5 rounded-xl border border-blue-100 font-bold text-sm flex items-center gap-2 hover:bg-blue-50 transition-all shadow-sm">
             <Package className="w-4 h-4" />
             إدارة المنتجات

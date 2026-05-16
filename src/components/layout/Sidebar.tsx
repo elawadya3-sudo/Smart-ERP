@@ -131,17 +131,33 @@ function SidebarGroup({ label, icon: Icon, children, activePathPrefix }: Sidebar
   );
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  setIsOpen?: (isOpen: boolean) => void;
+}
+
+export default function Sidebar({ isOpen = false, setIsOpen }: SidebarProps) {
   const { signOut, user } = useAuth();
   const { newTransferAlert, clearTransferAlert } = usePOS();
   const [showTransferModal, setShowTransferModal] = useState(false);
 
   return (
-    <motion.aside
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      className="w-64 h-screen bg-white border-l border-gray-100 fixed right-0 top-0 flex flex-col z-50 text-right"
-    >
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsOpen?.(false)}
+        />
+      )}
+      <motion.aside
+        initial={{ x: 100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className={cn(
+          "w-64 h-screen bg-white border-l border-gray-100 fixed right-0 top-0 flex flex-col z-50 text-right transition-transform duration-300 lg:translate-x-0",
+          isOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
       <div className="p-6 border-b border-gray-50 flex items-center gap-3">
         <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-100">
           <ShoppingCart className="text-white w-6 h-6" />
@@ -331,6 +347,7 @@ export default function Sidebar() {
         </button>
       </div>
     </motion.aside>
+    </>
   );
 }
 

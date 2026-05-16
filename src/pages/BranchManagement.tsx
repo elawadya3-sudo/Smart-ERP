@@ -696,7 +696,7 @@ export default function BranchManagement() {
               </button>
             </div>
 
-            <div className="bg-gray-50 rounded-3xl border border-gray-100 overflow-hidden mb-8">
+            <div className="bg-gray-50 rounded-3xl border border-gray-100 overflow-x-auto mb-8">
               <table className="w-full text-right border-collapse">
                 <thead>
                   <tr className="bg-gray-100/50">
@@ -1137,7 +1137,7 @@ function ReceivedProductsTable({ transfers, formatCurrency, products }: { transf
                           </div>
                           {group.history.map((item, hIdx) => (
                             <div key={`${item.transferId}-${hIdx}`} className={cn(
-                              "bg-white p-4 rounded-2xl border shadow-sm flex justify-between items-center transition-all",
+                              "bg-white p-4 rounded-2xl border shadow-sm flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 transition-all",
                               item.status === 'PENDING' ? "border-amber-200 bg-amber-50/10" : "border-blue-100 hover:border-blue-300"
                             )}>
                               <div className="flex items-center gap-4">
@@ -1162,7 +1162,7 @@ function ReceivedProductsTable({ transfers, formatCurrency, products }: { transf
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex gap-8 items-center">
+                              <div className="flex flex-wrap gap-4 md:gap-8 items-center w-full md:w-auto">
                                 <div className="text-center">
                                   <p className="text-sm font-black text-gray-400 uppercase tracking-tighter mb-1">الكمية</p>
                                   <span className="text-sm font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{item.quantity} قطعة</span>

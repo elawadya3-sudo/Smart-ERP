@@ -81,7 +81,7 @@ export default function GoodsReceiptPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 tracking-tight">توريد بضاعة جديد</h2>
           <p className="text-gray-500 mt-1">استلام شحنات من الموردين وتوجيهها للمستودع</p>
