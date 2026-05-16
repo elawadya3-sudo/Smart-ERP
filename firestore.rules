@@ -1,0 +1,139 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Connectivity Test
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isSignedIn() { return request.auth != null; }
+    
+    // Auth tokens never contain custom claims in this environment.
+    // We must look up roles using get() on a trusted database document.
+    function getUserData(uid) {
+      let path = /databases/$(database)/documents/users/$(uid);
+      return exists(path) ? get(path).data : {"role": "NONE"};
+    }
+    
+    function isAdmin() { 
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && (data.role == 'ADMIN' || data.role == 'admin'); 
+    }
+
+    function isCashier() {
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && (data.role == 'CASHIER' || data.role == 'employee');
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // --- DEFAULT DENY ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- ENTITY RULES ---
+    // USERS
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid is string && 
+               data.email is string && data.email.size() <= 200 &&
+               data.role in ['ADMIN', 'CASHIER', 'admin', 'employee'] &&
+               data.keys().hasAll(['uid', 'email', 'role']) &&
+               data.keys().size() >= 3;
+      }
+
+      // Users can read themselves. Admins can read everyone.
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      
+      // Only admins or the user themselves (initial creation) can create/write.
+      // In practice, admin creates cashiers.
+      allow create: if isSignedIn() && (isAdmin() || request.auth.uid == userId) && isValidId(userId) && isValidUser(incoming());
+      
+      allow update: if isSignedIn() && (isAdmin() || request.auth.uid == userId) && isValidId(userId) && 
+                      incoming().uid == existing().uid &&
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'role', 'branchId', 'isActive', 'createdAt']) && 
+                       (incoming().role == existing().role || isAdmin()));
+      
+      allow delete: if isAdmin();
+    }
+
+    // SHIFTS
+    match /shifts/{shiftId} {
+      function isValidShift(data) {
+        return (data.cashierId == request.auth.uid || isAdmin()) &&
+               data.branchId is string &&
+               data.status in ['OPEN', 'CLOSED'];
+      }
+      
+      allow read: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidShift(incoming());
+      allow update: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ORDERS
+    match /orders/{orderId} {
+      function isValidOrder(data) {
+        return data.total is number && data.total >= 0 &&
+               data.cashierId == request.auth.uid &&
+               data.branchId is string &&
+               data.shiftId is string &&
+               data.items is list && data.items.size() > 0;
+      }
+
+      allow read: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    // PRODUCTS
+    match /products/{productId} {
+      function isValidProduct(data) {
+        return data.name is string && data.name.size() <= 200 &&
+               data.sellingPrice is number &&
+               data.costPrice is number &&
+               data.quantity is number;
+      }
+
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidProduct(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // WAREHOUSES
+    match /warehouses/{warehouseId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // CUSTOMERS
+    match /customers/{customerId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // INVENTORY TRANSACTIONS
+    match /inventory_transactions/{txId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && incoming().createdBy == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // CATEGORIES, BRANDS AND SHOE TYPES
+    match /categories/{id} { allow read, write: if isSignedIn(); }
+    match /brands/{id} { allow read, write: if isSignedIn(); }
+    match /shoe_types/{id} { allow read, write: if isSignedIn(); }
+
+    // ACCOUNTING COLLECTIONS (Simplified for admin only writes)
+    match /accounts/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /journal_entries/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /cost_centers/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /settings/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+  }
+}

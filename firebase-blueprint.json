@@ -1,0 +1,262 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Store employees and admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "CASHIER"] },
+        "branchId": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Footwear inventory items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string" },
+        "category": { "type": "string" },
+        "subcategory": { "type": "string" },
+        "gender": { "type": "string" },
+        "shoeType": { "type": "string" },
+        "sku": { "type": "string" },
+        "barcode": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "wholesalePrice": { "type": "number" },
+        "specialPrice": { "type": "number" },
+        "minSellingPrice": { "type": "number" },
+        "referencePrice": { "type": "number" },
+        "currency": { "type": "string" },
+        "unitType": { "type": "string" },
+        "mainUnit": { "type": "string" },
+        "subUnits": { "type": "array" },
+        "warrantyDuration": { "type": "number" },
+        "warrantyUnit": { "type": "string" },
+        "hasExpiration": { "type": "boolean" },
+        "expirationDays": { "type": "number" },
+        "expirationAlertDays": { "type": "number" },
+        "initialQuantity": { "type": "number" },
+        "minStock": { "type": "number" },
+        "maxStock": { "type": "number" },
+        "reorderPoint": { "type": "number" },
+        "trackInventory": { "type": "boolean" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "quantity": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sku", "sellingPrice"]
+    },
+    "ProductVariant": {
+      "title": "ProductVariant",
+      "description": "Specific size/color variants of a product",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "size": { "type": "number" },
+        "color": { "type": "string" },
+        "sku": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" }
+      }
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories and subcategories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "parentId": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "Brand": {
+      "title": "Brand",
+      "description": "Product brands",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "InventoryMovement": {
+      "title": "InventoryMovement",
+      "description": "Record of stock additions or deductions",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "type": { "type": "string", "enum": ["IN", "OUT", "ADJUSTMENT"] },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Sales transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "shiftId": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "discount": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "visa"] },
+        "customerId": { "type": "string" },
+        "cashierId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["items", "total", "paymentMethod", "cashierId", "branchId", "shiftId"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "Employee work shifts and cash drawer logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cashierId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "openingBalance": { "type": "number" },
+        "closingBalance": { "type": "number" },
+        "actualCash": { "type": "number" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] }
+      },
+      "required": ["id", "cashierId", "branchId", "startTime", "openingBalance", "status"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer profiles and loyalty",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "points": { "type": "number" },
+        "balance": { "type": "number" },
+        "history": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global store configurations",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "currency": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" }
+      }
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Inventory storage locations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "location": { "type": "string" },
+        "manager": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "InventoryTransaction": {
+      "title": "InventoryTransaction",
+      "description": "Stock movements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "items": { "type": "array" },
+        "fromWarehouseId": { "type": "string" },
+        "toWarehouseId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Employee database"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Inventory database"
+    },
+    "product_variants": {
+      "schema": "ProductVariant",
+      "description": "Product size/color variations"
+    },
+    "categories": {
+      "schema": "Category",
+      "description": "Product hierarchy"
+    },
+    "brands": {
+      "schema": "Brand",
+      "description": "Manufacturer brands"
+    },
+    "inventory_movements": {
+      "schema": "InventoryMovement",
+      "description": "Stock movement audit trail"
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Sales records"
+    },
+    "customers": {
+      "schema": "Customer",
+      "description": "Customer database"
+    },
+    "settings": {
+      "schema": "Settings",
+      "description": "Store settings (singleton)"
+    },
+    "warehouses": {
+      "schema": "Warehouse",
+      "description": "Storage locations"
+    },
+    "inventory_transactions": {
+      "schema": "InventoryTransaction",
+      "description": "Inventory movement records"
+    },
+    "shifts": {
+      "schema": "Shift",
+      "description": "Drawer shift records"
+    },
+    "accounts": {
+      "schema": "object",
+      "description": "Chart of Accounts"
+    },
+    "journal_entries": {
+      "schema": "object",
+      "description": "Accounting journal entries"
+    },
+    "cost_centers": {
+      "schema": "object",
+      "description": "Cost centers for accounting"
+    },
+    "test": {
+      "schema": "object",
+      "description": "Connectivity test path"
+    }
+  }
+}
