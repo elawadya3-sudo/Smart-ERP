@@ -200,6 +200,23 @@ export default function AddProductPage() {
 
   }, [id, reset]);
 
+  const calculateEAN13CheckDigit = (digits: string) => {
+    const sum = digits
+      .split('')
+      .map(Number)
+      .reverse()
+      .reduce((acc, num, index) => acc + num * (index % 2 === 0 ? 3 : 1), 0);
+    const remainder = sum % 10;
+    return remainder === 0 ? '0' : String(10 - remainder);
+  };
+
+  const generateRandomBarcode = () => {
+    const randomDigits = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join('');
+    const checkDigit = calculateEAN13CheckDigit(randomDigits);
+    const barcodeValue = `${randomDigits}${checkDigit}`;
+    setValue('barcode', barcodeValue);
+  };
+
   const onSubmit = async (data: ProductFormData) => {
     try {
       const uploadedImageUrls: string[] = [];
@@ -416,8 +433,15 @@ export default function AddProductPage() {
                                   {...register('barcode')}
                                   type="text" 
                                   placeholder="امسح الباركود..."
-                                  className="w-full bg-gray-50 border border-transparent rounded-2xl pr-14 pl-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all font-mono"
+                                  className="w-full bg-gray-50 border border-transparent rounded-2xl pr-24 pl-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all font-mono"
                                 />
+                                <button
+                                  type="button"
+                                  onClick={generateRandomBarcode}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-blue-600 text-white rounded-full px-3 py-2 text-xs font-black tracking-wide hover:bg-blue-700 transition-all"
+                                >
+                                  توليد
+                                </button>
                               </div>
                           </div>
                         </div>

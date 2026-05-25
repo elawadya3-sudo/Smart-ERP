@@ -28,6 +28,7 @@ import { productsService, ordersService } from '../services/firestore';
 import { Product, OrderItem, StockLevel, Order, Warehouse, InventoryTransaction } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useAuth } from '../context/AuthContext';
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -65,10 +66,8 @@ export default function POS() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
   const [cameraSupported, setCameraSupported] = useState(false);
-  const [barcodeDetectorSupported, setBarcodeDetectorSupported] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const scannerRef = useRef<BrowserMultiFormatReader | null>(null);
   const scanTimeoutRef = useRef<number | null>(null);
   const [requestModal, setRequestModal] = useState<{
     product: any;
@@ -137,7 +136,6 @@ export default function POS() {
 
   useEffect(() => {
     setCameraSupported(!!(navigator.mediaDevices?.getUserMedia));
-    setBarcodeDetectorSupported(!!(window as any).BarcodeDetector);
   }, []);
 
   // Sync isFirstLoad
@@ -150,77 +148,51 @@ export default function POS() {
   const currentShift = getOpenShift(selectedBranchId);
   const branchWarehouse = warehouses.find(w => w.id === selectedBranchId);
 
+  const initializeZXingScanner = () => {
+    if (!videoRef.current) {
+      scanTimeoutRef.current = window.setTimeout(initializeZXingScanner, 200);
+      return;
+    }
+
+    if (!scannerRef.current) {
+      scannerRef.current = new BrowserMultiFormatReader();
+    }
+
+    scannerRef.current.decodeFromVideoDevice(undefined, videoRef.current, (result, err) => {
+      if (result) {
+        const code = result.getText();
+        if (code) {
+          setSearchTerm(code);
+          stopBarcodeCamera();
+          handleBarcodeSearch(code);
+        }
+      } else if (err) {
+        const isNotFound = err?.name === 'NotFoundException' || err?.message?.includes('not found');
+        if (!isNotFound) {
+          console.warn('ZXing scan error', err);
+        }
+      }
+    }).catch(err => {
+      console.error('ZXing init error:', err);
+      setScanMessage('فشل تشغيل ماسح الكاميرا. الرجاء المحاولة مرة أخرى.');
+      setIsScanning(false);
+    });
+  };
+
   const startBarcodeCamera = async () => {
     if (!cameraSupported) {
       alert('الكاميرا غير متاحة في هذا المتصفح. يمكنك استخدام قارئ باركود USB أو إدخال الباركود يدوياً.');
       return;
     }
 
-    try {
-      setIsScanning(true);
-      setScanMessage('جاري تشغيل الكاميرا...');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      streamRef.current = stream;
-      setCameraStream(stream);
-      setScanMessage('وجه الكاميرا إلى الباركود لقراءته');
-      if (!barcodeDetectorSupported) {
-        setScanMessage('الكشف عن الباركود غير مدعوم، يرجى استخدام إدخال الباركود يدوياً.');
-      }
-
-      const detectorClass = (window as any).BarcodeDetector;
-      if (!detectorClass) {
-        return;
-      }
-
-      const detector = new detectorClass({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39'] });
-
-      const scanFrame = async () => {
-        if (!videoRef.current || videoRef.current.readyState !== HTMLMediaElement.HAVE_ENOUGH_DATA) {
-          scanTimeoutRef.current = window.setTimeout(scanFrame, 500);
-          return;
-        }
-
-        try {
-          const results = await detector.detect(videoRef.current);
-          if (results.length > 0) {
-            const code = results[0]?.rawValue;
-            if (code) {
-              setSearchTerm(code);
-              stopBarcodeCamera();
-              handleBarcodeSearch(code);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn('Barcode detector error', err);
-        }
-        scanTimeoutRef.current = window.setTimeout(scanFrame, 500);
-      };
-
-      scanFrame();
-    } catch (err) {
-      console.error(err);
-      alert('تعذر الوصول إلى الكاميرا. تأكد من أذونات المتصفح أو جرب وضع الهاتف.');
-      setIsScanning(false);
-    }
+    setIsScanning(true);
+    setScanMessage('جاري تشغيل الكاميرا...');
+    initializeZXingScanner();
   };
-
-  useEffect(() => {
-    if (!isScanning || !cameraStream || !videoRef.current) return;
-
-    videoRef.current.srcObject = cameraStream;
-    videoRef.current.muted = true;
-    videoRef.current.playsInline = true;
-    const playPromise = videoRef.current.play();
-    if (playPromise?.catch) {
-      playPromise.catch(err => console.warn('Video play failed:', err));
-    }
-  }, [isScanning, cameraStream]);
 
   const stopBarcodeCamera = () => {
     setIsScanning(false);
     setScanMessage('');
-    setCameraStream(null);
     if (scanTimeoutRef.current) {
       window.clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
@@ -229,9 +201,9 @@ export default function POS() {
       videoRef.current.pause();
       videoRef.current.srcObject = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+    if (scannerRef.current) {
+      scannerRef.current.reset();
+      scannerRef.current = null;
     }
   };
 
