@@ -66,6 +66,7 @@ export default function POS() {
   const [scanMessage, setScanMessage] = useState('');
   const [cameraSupported, setCameraSupported] = useState(false);
   const [barcodeDetectorSupported, setBarcodeDetectorSupported] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanTimeoutRef = useRef<number | null>(null);
@@ -156,14 +157,11 @@ export default function POS() {
     }
 
     try {
+      setIsScanning(true);
       setScanMessage('جاري تشغيل الكاميرا...');
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setIsScanning(true);
+      setCameraStream(stream);
       setScanMessage('وجه الكاميرا إلى الباركود لقراءته');
       if (!barcodeDetectorSupported) {
         setScanMessage('الكشف عن الباركود غير مدعوم، يرجى استخدام إدخال الباركود يدوياً.');
@@ -203,12 +201,26 @@ export default function POS() {
     } catch (err) {
       console.error(err);
       alert('تعذر الوصول إلى الكاميرا. تأكد من أذونات المتصفح أو جرب وضع الهاتف.');
+      setIsScanning(false);
     }
   };
+
+  useEffect(() => {
+    if (!isScanning || !cameraStream || !videoRef.current) return;
+
+    videoRef.current.srcObject = cameraStream;
+    videoRef.current.muted = true;
+    videoRef.current.playsInline = true;
+    const playPromise = videoRef.current.play();
+    if (playPromise?.catch) {
+      playPromise.catch(err => console.warn('Video play failed:', err));
+    }
+  }, [isScanning, cameraStream]);
 
   const stopBarcodeCamera = () => {
     setIsScanning(false);
     setScanMessage('');
+    setCameraStream(null);
     if (scanTimeoutRef.current) {
       window.clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
