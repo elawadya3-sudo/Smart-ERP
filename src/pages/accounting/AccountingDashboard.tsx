@@ -9,7 +9,7 @@ import {
   Building2,
   Users2,
   TrendingUp,
-  History,
+  History as HistoryIcon,
   Scale,
   Plus
 } from 'lucide-react';
@@ -93,7 +93,7 @@ export default function AccountingDashboard() {
            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                    <History className="w-5 h-5 text-blue-600" />
+                    <HistoryIcon className="w-5 h-5 text-blue-600" />
                     أحدث القيود المحاسبية
                  </h3>
                  <button className="text-sm font-bold text-gray-400 hover:text-blue-600 uppercase tracking-widest transition-colors">عرض دفتر اليومية</button>

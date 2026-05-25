@@ -18,6 +18,10 @@ export default function CategoriesAndBrands() {
   const [newCategory, setNewCategory] = useState('');
   const [newBrand, setNewBrand] = useState('');
   const [newShoeType, setNewShoeType] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingBrandId, setEditingBrandId] = useState<string | null>(null);
+  const [editingShoeTypeId, setEditingShoeTypeId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -43,13 +47,8 @@ export default function CategoriesAndBrands() {
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('handleAddCategory called with:', newCategory);
-    if (!newCategory.trim()) {
-      console.log('Category name is empty, skipping');
-      return;
-    }
+    if (!newCategory.trim()) return;
     try {
-      console.log('Attempting to add to Firestore...');
       await addDoc(collection(db, 'categories'), { name: newCategory.trim(), createdAt: new Date().toISOString() });
       setNewCategory('');
       loadData();
@@ -74,13 +73,8 @@ export default function CategoriesAndBrands() {
 
   const handleAddBrand = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('handleAddBrand called with:', newBrand);
-    if (!newBrand.trim()) {
-      console.log('Brand name is empty, skipping');
-      return;
-    }
+    if (!newBrand.trim()) return;
     try {
-      console.log('Attempting to add to Firestore...');
       await addDoc(collection(db, 'brands'), { name: newBrand.trim(), createdAt: new Date().toISOString() });
       setNewBrand('');
       loadData();
@@ -112,7 +106,7 @@ export default function CategoriesAndBrands() {
       loadData();
     } catch (error: any) {
       console.error(error);
-      alert(`حدث خطأ: ${error.code} - ${error.message}`);
+      alert(`حدث خطأ: ${error.code || 'unknown'} - ${error.message}`);
     }
   };
 
@@ -128,6 +122,49 @@ export default function CategoriesAndBrands() {
     }
   };
 
+  const cancelEdit = () => {
+    setEditingCategoryId(null);
+    setEditingBrandId(null);
+    setEditingShoeTypeId(null);
+    setEditName('');
+  };
+
+  const handleUpdateCategory = async (id: string) => {
+    if (!editName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'categories', id), { name: editName.trim() });
+      cancelEdit();
+      loadData();
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء تحديث القسم.');
+    }
+  };
+
+  const handleUpdateBrand = async (id: string) => {
+    if (!editName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'brands', id), { name: editName.trim() });
+      cancelEdit();
+      loadData();
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء تحديث البراند.');
+    }
+  };
+
+  const handleUpdateShoeType = async (id: string) => {
+    if (!editName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'shoe_types', id), { name: editName.trim() });
+      cancelEdit();
+      loadData();
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء تحديث النوع.');
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-gray-500">جاري التحميل...</div>;
   }
@@ -137,14 +174,17 @@ export default function CategoriesAndBrands() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       {/* Categories Section */}
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 space-y-6">
-        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
-          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-            <Tag className="w-5 h-5" />
+        <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+              <Tag className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-gray-900">الأقسام (Categories)</h2>
+              <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة أقسام المنتجات</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-black text-gray-900">الأقسام (Categories)</h2>
-            <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة أقسام المنتجات</p>
-          </div>
+          <button type="button" onClick={loadData} className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-900">تحديث</button>
         </div>
 
         <form onSubmit={handleAddCategory} className="flex gap-2">
@@ -166,13 +206,31 @@ export default function CategoriesAndBrands() {
         <div className="space-y-2">
           {categories.map(category => (
             <div key={category.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl group hover:bg-indigo-50/50 transition-colors">
-              <span className="font-bold text-gray-700">{category.name}</span>
-              <button
-                onClick={() => handleDeleteCategory(category.id)}
-                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex-1">
+                {editingCategoryId === category.id ? (
+                  <div className="flex items-center gap-2">
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none" />
+                    <button type="button" onClick={() => handleUpdateCategory(category.id)} className="px-3 py-2 bg-indigo-600 text-white rounded-2xl text-xs font-black">حفظ</button>
+                    <button type="button" onClick={cancelEdit} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-2xl text-xs font-black">إلغاء</button>
+                  </div>
+                ) : (
+                  <span className="font-bold text-gray-700">{category.name}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                {editingCategoryId !== category.id && (
+                  <button type="button" onClick={() => { setEditingCategoryId(category.id); setEditName(category.name); }} className="text-gray-400 hover:text-indigo-600">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(category.id)}
+                  className="text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
           {categories.length === 0 && (
@@ -183,14 +241,17 @@ export default function CategoriesAndBrands() {
 
       {/* Brands Section */}
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 space-y-6">
-        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
-          <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-            <Briefcase className="w-5 h-5" />
+        <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+              <Briefcase className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-gray-900">البراندات (Brands)</h2>
+              <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة الماركات التجارية</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-black text-gray-900">البراندات (Brands)</h2>
-            <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة الماركات التجارية</p>
-          </div>
+          <button type="button" onClick={loadData} className="text-xs font-black uppercase tracking-widest text-blue-600 hover:text-blue-900">تحديث</button>
         </div>
 
         <form onSubmit={handleAddBrand} className="flex gap-2">
@@ -212,13 +273,31 @@ export default function CategoriesAndBrands() {
         <div className="space-y-2">
           {brands.map(brand => (
             <div key={brand.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl group hover:bg-blue-50/50 transition-colors">
-              <span className="font-bold text-gray-700">{brand.name}</span>
-              <button
-                onClick={() => handleDeleteBrand(brand.id)}
-                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex-1">
+                {editingBrandId === brand.id ? (
+                  <div className="flex items-center gap-2">
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none" />
+                    <button type="button" onClick={() => handleUpdateBrand(brand.id)} className="px-3 py-2 bg-blue-600 text-white rounded-2xl text-xs font-black">حفظ</button>
+                    <button type="button" onClick={cancelEdit} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-2xl text-xs font-black">إلغاء</button>
+                  </div>
+                ) : (
+                  <span className="font-bold text-gray-700">{brand.name}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                {editingBrandId !== brand.id && (
+                  <button type="button" onClick={() => { setEditingBrandId(brand.id); setEditName(brand.name); }} className="text-gray-400 hover:text-blue-600">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBrand(brand.id)}
+                  className="text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
           {brands.length === 0 && (
@@ -230,14 +309,17 @@ export default function CategoriesAndBrands() {
 
       {/* Shoe Types Section */}
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 space-y-6">
-        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
-          <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
-            <Briefcase className="w-5 h-5" />
+        <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
+              <Briefcase className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-gray-900">أنواع الأحذية (Shoe Types)</h2>
+              <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة أنواع الأحذية</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-black text-gray-900">أنواع الأحذية (Shoe Types)</h2>
-            <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">إدارة أنواع الأحذية</p>
-          </div>
+          <button type="button" onClick={loadData} className="text-xs font-black uppercase tracking-widest text-purple-600 hover:text-purple-900">تحديث</button>
         </div>
 
         <form onSubmit={handleAddShoeType} className="flex gap-2">
@@ -259,13 +341,31 @@ export default function CategoriesAndBrands() {
         <div className="space-y-2">
           {shoeTypes.map(st => (
             <div key={st.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl group hover:bg-purple-50/50 transition-colors">
-              <span className="font-bold text-gray-700">{st.name}</span>
-              <button
-                onClick={() => handleDeleteShoeType(st.id)}
-                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex-1">
+                {editingShoeTypeId === st.id ? (
+                  <div className="flex items-center gap-2">
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none" />
+                    <button type="button" onClick={() => handleUpdateShoeType(st.id)} className="px-3 py-2 bg-purple-600 text-white rounded-2xl text-xs font-black">حفظ</button>
+                    <button type="button" onClick={cancelEdit} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-2xl text-xs font-black">إلغاء</button>
+                  </div>
+                ) : (
+                  <span className="font-bold text-gray-700">{st.name}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                {editingShoeTypeId !== st.id && (
+                  <button type="button" onClick={() => { setEditingShoeTypeId(st.id); setEditName(st.name); }} className="text-gray-400 hover:text-purple-600">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteShoeType(st.id)}
+                  className="text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
           {shoeTypes.length === 0 && (

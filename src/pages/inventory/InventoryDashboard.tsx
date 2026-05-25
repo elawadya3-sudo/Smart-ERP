@@ -6,7 +6,7 @@ import {
   ArrowDownLeft, 
   ArrowUpRight, 
   ArrowLeftRight, 
-  History,
+  History as HistoryIcon,
   FileText,
   Warehouse as WarehouseIcon,
   Search,
@@ -15,7 +15,9 @@ import {
   ChevronLeft,
   AlertCircle,
   TrendingUp,
-  PackagePlus
+  PackagePlus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { inventoryTransactionService, warehouseService } from '../../services/inventory';
@@ -24,10 +26,88 @@ import { InventoryTransaction, Warehouse, Product } from '../../types';
 import { cn, formatDate } from '../../lib/utils';
 
 export default function InventoryDashboard() {
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
+
+  const toggleSelectAll = () => {
+    if (selectedTxIds.length === transactions.length && transactions.length > 0) {
+      setSelectedTxIds([]);
+    } else {
+      setSelectedTxIds(transactions.map(t => t.id));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    if (selectedTxIds.includes(id)) {
+      setSelectedTxIds(prev => prev.filter(item => item !== id));
+    } else {
+      setSelectedTxIds(prev => [...prev, id]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTxIds.length === 0) return;
+    const confirmMessage = `هل أنت متأكد من حذف العمليات المحددة (${selectedTxIds.length}) وعكس تأثيرها على المخزون؟`;
+    if (window.confirm(confirmMessage)) {
+      setLoading(true);
+      try {
+        let successCount = 0;
+        let failCount = 0;
+        for (const id of selectedTxIds) {
+          const tx = transactions.find(t => t.id === id);
+          if (tx) {
+            try {
+              await inventoryTransactionService.deleteStockMovement(tx.id, tx);
+              successCount++;
+            } catch (err) {
+              console.error(`Failed to delete transaction ${id}:`, err);
+              failCount++;
+            }
+          }
+        }
+        // reload transactions
+        const txs = await inventoryTransactionService.getAll();
+        setTransactions(txs);
+        setSelectedTxIds([]);
+        if (failCount > 0) {
+          alert(`تم حذف ${successCount} عمليات بنجاح، وفشل حذف ${failCount} عمليات.`);
+        } else {
+          alert(`تم حذف ${successCount} عمليات بنجاح وتحديث أرصدة المخزون!`);
+        }
+      } catch (err: any) {
+        console.error("Bulk delete failed:", err);
+        alert(err.message || 'حدث خطأ أثناء الحذف الجماعي');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleDeleteTransaction = async (tx: InventoryTransaction) => {
+    if (window.confirm('هل أنت متأكد من حذف هذه العملية وعكس تأثيرها على المخزون؟')) {
+      try {
+        await inventoryTransactionService.deleteStockMovement(tx.id, tx);
+        setTransactions(prev => prev.filter(item => item.id !== tx.id));
+        setSelectedTxIds(prev => prev.filter(id => id !== tx.id));
+        alert('تم حذف العملية وتحديث المخزون بنجاح!');
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || 'حدث خطأ أثناء حذف العملية');
+      }
+    }
+  };
+
+  const handleEditTransaction = (tx: InventoryTransaction) => {
+    if (tx.type === 'TRANSFER') {
+      navigate(`/inventory/transfers?edit=${tx.id}`);
+    } else if (tx.type === 'RECEIPT') {
+      navigate(`/inventory/receipt?edit=${tx.id}`);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -79,14 +159,14 @@ export default function InventoryDashboard() {
             <PackagePlus className="w-4 h-4" />
             إضافة منتج جديد
           </Link>
-          <button className="bg-white text-gray-700 px-5 py-2.5 rounded-xl border border-gray-100 font-bold text-sm flex items-center gap-2 hover:bg-gray-50 transition-all shadow-sm">
+          <Link to="/inventory/warehouses" className="bg-white text-gray-700 px-5 py-2.5 rounded-xl border border-gray-100 font-bold text-sm flex items-center gap-2 hover:bg-gray-50 transition-all shadow-sm">
             <WarehouseIcon className="w-4 h-4" />
-            المستودعات ({warehouses.length})
-          </button>
-          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2">
+            المستودعات
+          </Link>
+          <Link to="/inventory/receipt" className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2">
             <Plus className="w-4 h-4" />
             عملية مخزنية جديدة
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -109,61 +189,100 @@ export default function InventoryDashboard() {
           <p className="text-blue-100 text-sm font-medium leading-relaxed mt-1">استلام شحنات جديدة وتحديث الأرصدة</p>
         </Link>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
+        <Link to="/inventory/transfers" className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
           <div className="bg-orange-50 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 text-orange-600">
             <ArrowLeftRight className="w-6 h-6" />
           </div>
           <h3 className="font-bold text-gray-900 text-lg">تحويل مخزني</h3>
           <p className="text-gray-500 text-sm font-medium leading-relaxed mt-1">نقل المنتجات بين الفروع والمستودعات بكل سهولة</p>
-        </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
+        <Link to="/inventory/stock-taking" className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
           <div className="bg-purple-50 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 text-purple-600">
-            <History className="w-6 h-6" />
+            <HistoryIcon className="w-6 h-6" />
           </div>
           <h3 className="font-bold text-gray-900 text-lg">جرد المخزون</h3>
           <p className="text-gray-500 text-sm font-medium leading-relaxed mt-1">مطابقة الكميات الفعلية مع النظام وتسوية الفروقات</p>
-        </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
+        <Link to="/inventory/reports" className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
           <div className="bg-green-50 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 text-green-600">
             <FileText className="w-6 h-6" />
           </div>
           <h3 className="font-bold text-gray-900 text-lg">التقارير</h3>
           <p className="text-gray-500 text-sm font-medium leading-relaxed mt-1">تحليلات الأرصدة، معدل الدوران، وقيمة المخزون</p>
-        </div>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-          <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+          <div className="p-8 border-b border-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/30 gap-4">
             <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <History className="w-5 h-5 text-blue-600" />
+              <HistoryIcon className="w-5 h-5 text-blue-600" />
               آخر الحركات المخزنية
             </h3>
-            <button className="text-sm font-bold text-gray-400 hover:text-blue-600 uppercase tracking-widest transition-colors">عرض السجل الكامل</button>
+            {selectedTxIds.length > 0 ? (
+              <div className="flex items-center gap-3 bg-red-50 text-red-600 px-4 py-2 rounded-2xl border border-red-100 animate-in fade-in zoom-in-95 duration-200">
+                <span className="text-xs font-black">تم تحديد {selectedTxIds.length} عملية</span>
+                <button 
+                  onClick={handleBulkDelete}
+                  className="bg-red-600 text-white px-3 py-1.5 rounded-xl font-bold text-xs hover:bg-red-700 active:scale-95 transition-all flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  حذف العمليات المحددة
+                </button>
+                <button 
+                  onClick={() => setSelectedTxIds([])}
+                  className="text-gray-400 hover:text-gray-600 font-bold text-xs"
+                >
+                  إلغاء
+                </button>
+              </div>
+            ) : (
+              <button className="text-sm font-bold text-gray-400 hover:text-blue-600 uppercase tracking-widest transition-colors">عرض السجل الكامل</button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-right">
               <thead className="bg-gray-50/50 text-sm text-gray-400 uppercase font-black">
                 <tr className="border-b border-gray-100">
+                  <th className="px-8 py-4 w-12">
+                    <input 
+                      type="checkbox"
+                      checked={transactions.length > 0 && selectedTxIds.length === transactions.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-8 py-4">النوع</th>
                   <th className="px-8 py-4">المرجع</th>
                   <th className="px-8 py-4">الأصناف</th>
                   <th className="px-8 py-4">التاريخ</th>
                   <th className="px-8 py-4">الحالة</th>
+                  <th className="px-8 py-4">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-20 text-center text-gray-400 font-medium italic">
+                    <td colSpan={7} className="py-20 text-center text-gray-400 font-medium italic">
                       لا يوجد حركات مخزنية مسجلة حالياً
                     </td>
                   </tr>
                 ) : (
                   transactions.map(tx => (
-                    <tr key={tx.id} className="group hover:bg-gray-50 transition-colors">
+                    <tr key={tx.id} className={cn(
+                      "group hover:bg-gray-50 transition-colors",
+                      selectedTxIds.includes(tx.id) && "bg-blue-50/20 hover:bg-blue-50/30"
+                    )}>
+                      <td className="px-8 py-4 w-12">
+                        <input 
+                          type="checkbox"
+                          checked={selectedTxIds.includes(tx.id)}
+                          onChange={() => toggleSelectOne(tx.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-8 py-4">
                         <div className="flex items-center gap-3">
                           <div className={cn(
@@ -182,6 +301,24 @@ export default function InventoryDashboard() {
                         <span className={cn("px-2.5 py-1 rounded-full text-sm font-bold uppercase", getStatusColor(tx.status))}>
                           {tx.status === 'COMPLETED' ? 'مكتمل' : 'قيد المعالجة'}
                         </span>
+                      </td>
+                      <td className="px-8 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditTransaction(tx)}
+                            className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                            title="تعديل"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTransaction(tx)}
+                            className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

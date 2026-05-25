@@ -19,6 +19,7 @@ import { collection, query, setDoc, doc, updateDoc, deleteDoc, onSnapshot } from
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { cn, formatDate } from '../../lib/utils';
 import { Warehouse } from '../../types';
+import { getCurrentTenant } from '../../lib/tenantStorage';
 
 const INITIAL_WAREHOUSES: any[] = [
   {
@@ -35,6 +36,7 @@ export default function WarehousesPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [newWarehouse, setNewWarehouse] = useState<{name: string, type: 'MAIN' | 'BRANCH'}>({
     name: '',
     type: 'BRANCH'
@@ -71,14 +73,15 @@ export default function WarehousesPage() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteWarehouse = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteWarehouse = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    console.log('handleDeleteWarehouse called for id:', id);
     if (window.confirm('هل أنت متأكد من حذف هذا المستودع؟ لا يمكن التراجع عن هذا الإجراء.')) {
-      try {
-        await deleteDoc(doc(db, 'warehouses', id));
-      } catch (error) {
+      console.log('Confirmed deletion for id:', id);
+      deleteDoc(doc(db, 'warehouses', id)).catch((error) => {
+        console.error('Error deleting warehouse:', error);
         handleFirestoreError(error, OperationType.DELETE, `warehouses/${id}`);
-      }
+      });
     }
   };
 
@@ -98,6 +101,22 @@ export default function WarehousesPage() {
         handleFirestoreError(error, OperationType.UPDATE, `warehouses/${editingWarehouseId}`);
       }
     } else {
+      // Check tenant limits
+      let currentTenant = null;
+      try {
+        currentTenant = await getCurrentTenant();
+      } catch (error) {
+        console.warn('Unable to load current tenant data:', error);
+      }
+
+      if (currentTenant) {
+        const branchCount = warehouses.filter(w => (w.type === 'BRANCH' || !w.type) && w.id !== '1').length;
+        if (branchCount >= currentTenant.maxBranches) {
+          alert(`عذراً، لقد وصلت للحد الأقصى للفروع المسموح بها (${currentTenant.maxBranches}) في خطتك الحالية.`);
+          return;
+        }
+      }
+
       const id = Math.random().toString(36).substr(2, 9);
       const warehouse: Warehouse = {
         id,
@@ -237,8 +256,7 @@ export default function WarehousesPage() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                     key={wh.id} 
-                    onClick={() => navigate(`/inventory/warehouses/${wh.id}`)}
-                    className="hover:bg-gray-50/80 transition-colors group cursor-pointer"
+                    className="hover:bg-gray-50/80 transition-colors group"
                   >
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
@@ -246,7 +264,12 @@ export default function WarehousesPage() {
                           <Building2 className="w-6 h-6" />
                         </div>
                         <div>
-                          <p className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{wh.name}</p>
+                          <button 
+                            onClick={() => navigate(`/inventory/warehouses/${wh.id}`)}
+                            className="font-bold text-gray-900 hover:text-blue-600 transition-colors text-right block"
+                          >
+                            {wh.name}
+                          </button>
                           <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-0.5">Branch Account</p>
                         </div>
                       </div>
@@ -270,20 +293,52 @@ export default function WarehousesPage() {
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={(e) => openEditModal(e, wh)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                          title="تعديل"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteWarehouse(e, wh.id)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="حذف"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {confirmDeleteId === wh.id ? (
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteDoc(doc(db, 'warehouses', wh.id)).catch((error) => {
+                                  console.error('Error deleting warehouse:', error);
+                                  handleFirestoreError(error, OperationType.DELETE, `warehouses/${wh.id}`);
+                                });
+                                setConfirmDeleteId(null);
+                              }}
+                              className="text-xs font-bold text-red-600 px-2 py-1 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              حذف
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteId(null);
+                              }}
+                              className="text-xs font-bold text-gray-500 px-2 py-1 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                              إلغاء
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={(e) => openEditModal(e, wh)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                              title="تعديل"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteId(wh.id);
+                              }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="حذف"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                         <ChevronRight className="w-5 h-5 text-gray-300 ml-2 group-hover:-translate-x-1 transition-transform" />
                       </div>
                     </td>

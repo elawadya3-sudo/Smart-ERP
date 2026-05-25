@@ -5,6 +5,7 @@ import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { LogIn, Github, Chrome } from 'lucide-react';
+import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,14 +16,14 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/";
+  const { settings } = useMainStoreSettings();
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const finalEmail = email.includes('@') ? email : `${email}@system.local`;
     try {
-      const finalEmail = email.includes('@') ? email : `${email}@system.local`;
-
       if (isRegistering) {
         const result = await createUserWithEmailAndPassword(auth, finalEmail, password);
         const user = result.user;
@@ -54,6 +55,30 @@ export default function Login() {
       navigate(from, { replace: true });
     } catch (err: any) {
       console.error("Auth Error:", err);
+      
+      // Auto-create master admin on first login attempt if it doesn't exist
+      if (finalEmail === 'master@system.local' && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')) {
+        try {
+          const result = await createUserWithEmailAndPassword(auth, finalEmail, password);
+          const user = result.user;
+          
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            email: user.email,
+            name: 'الدعم الفني الرئيسي',
+            role: 'ADMIN',
+            isRoot: true,
+            isActive: true,
+            createdAt: new Date().toISOString()
+          });
+          
+          navigate(from, { replace: true });
+          return;
+        } catch (createErr) {
+          console.error("Failed to auto-create master user:", createErr);
+        }
+      }
+
       let errorMsg = "خطأ في تسجيل الدخول. يرجى التأكد من اسم المستخدم وكلمة المرور.";
       if (err.code === 'auth/invalid-credential') {
         errorMsg = "بيانات الاعتماد غير صالحة. تأكد من اسم المستخدم وكلمة المرور.";
@@ -129,7 +154,7 @@ export default function Login() {
             <LogIn className="text-white w-10 h-10" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">تسجيل الدخول</h1>
-          <p className="text-gray-500 font-medium">مرحباً بك في نظام رد أثر لإدارة الأحذية</p>
+          <p className="text-gray-500 font-medium">مرحباً بك في نظام {settings?.storeName || 'رد أثر'} لإدارة الأحذية</p>
         </div>
 
         <form onSubmit={handleEmailSignIn} className="space-y-4">

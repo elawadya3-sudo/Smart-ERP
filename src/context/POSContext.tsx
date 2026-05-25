@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
-import { Shift, Order } from '../types';
-import { collection, query, onSnapshot, setDoc, doc, orderBy, updateDoc, where, getDoc, limit } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { Shift, Order, AppNotification } from '../types';
+import { collection, query, onSnapshot, setDoc, doc, orderBy, updateDoc, where, getDoc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from '../lib/utils';
+import { notificationsService } from '../services/firestore';
 
 interface POSContextType {
   shifts: Shift[];
@@ -16,6 +17,15 @@ interface POSContextType {
   deleteInvoice: (invoiceId: string) => Promise<void>;
   newTransferAlert: any;
   clearTransferAlert: () => void;
+  requestBranchTransfer: (params: {
+    fromBranchId: string;
+    fromBranchName: string;
+    toBranchId: string;
+    toBranchName: string;
+    productId: string;
+    productName: string;
+    quantity: number;
+  }) => Promise<boolean>;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -86,6 +96,14 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (latestToBranch) {
           if (!isFirstLoad.current && lastTransferId && latestToBranch.id !== lastTransferId) {
             setNewTransferAlert(latestToBranch);
+            
+            // Add Global Notification
+            notificationsService.add({
+              title: 'استلام منتجات',
+              message: `تم وصول بضاعة جديدة للفرع من المستودع الرئيسي (رقم: ${latestToBranch.id.slice(0,8)})`,
+              type: 'TRANSFER',
+              metadata: { transferId: latestToBranch.id }
+            });
           }
           setLastTransferId(latestToBranch.id);
         }
@@ -146,7 +164,7 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error('Shift not found anywhere.');
       }
 
-      const shiftInvoices = (invoices || []).filter(inv => inv && inv.shiftId === shiftId && inv.status !== 'RETURNED');
+      const shiftInvoices = (invoices || []).filter(inv => inv && inv.shiftId === shiftId && (inv.status === 'COMPLETED' || !inv.status));
       const cashSales = shiftInvoices.filter(inv => inv.paymentMethod === 'cash').reduce((acc, inv) => acc + (inv.total || 0), 0);
       const cardSales = shiftInvoices.filter(inv => inv.paymentMethod === 'visa').reduce((acc, inv) => acc + (inv.total || 0), 0);
 
@@ -177,7 +195,32 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addInvoice = async (invoice: Order) => {
     try {
-      await setDoc(doc(db, 'orders', invoice.id), { ...invoice, status: invoice.status || 'COMPLETED' });
+      const invoiceData = { ...invoice, status: invoice.status || 'COMPLETED' } as any;
+      if (!invoiceData.cashierId) {
+        invoiceData.cashierId = auth.currentUser?.uid || invoiceData.cashierId;
+      }
+
+      if (!invoiceData.cashierId) {
+        throw new Error('Missing cashierId for invoice creation.');
+      }
+
+      Object.keys(invoiceData).forEach(key => {
+        if (invoiceData[key] === undefined) {
+          delete invoiceData[key];
+        }
+      });
+
+      await setDoc(doc(db, 'orders', invoice.id), invoiceData);
+      
+      // Add Notification
+      notificationsService.add({
+        title: invoice.status === 'PENDING' ? 'فاتورة معلقة' : 'فاتورة بيع جديدة',
+        message: invoice.status === 'PENDING'
+          ? `تم تعليق الفاتورة برقم ${invoice.id.slice(0, 8)}`
+          : `تم إصدار فاتورة جديدة بقيمة ${formatCurrency(invoice.total)}`,
+        type: 'INVOICE',
+        metadata: { invoiceId: invoice.id }
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `orders/${invoice.id}`);
     }
@@ -185,18 +228,117 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateInvoice = async (invoiceId: string, updates: Partial<Order>) => {
     try {
-      await updateDoc(doc(db, 'orders', invoiceId), updates);
+      const updateData = { ...updates } as any;
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+
+      if (Object.keys(updateData).length === 0) {
+        return;
+      }
+
+      await updateDoc(doc(db, 'orders', invoiceId), updateData);
+      
+      // Add Notification
+      const isReturn = updateData.status === 'RETURNED';
+      notificationsService.add({
+        title: isReturn ? 'عملية إرجاع' : 'تعديل فاتورة',
+        message: isReturn 
+          ? `تم عمل إرجاع للفاتورة رقم ${invoiceId.slice(0,8)}` 
+          : `تم تعديل بيانات الفاتورة رقم ${invoiceId.slice(0,8)} بواسطة المدير`,
+        type: isReturn ? 'RETURN' : 'INVOICE',
+        metadata: { invoiceId }
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `orders/${invoiceId}`);
     }
   };
 
-  const deleteInvoice = async (invoiceId: string) => {
+  const cancelInvoice = async (invoiceId: string, reason?: string) => {
+    if (!invoiceId) {
+      throw new Error('Invalid invoiceId for cancelInvoice');
+    }
+
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) {
+      throw new Error('Cannot cancel invoice: no authenticated user.');
+    }
+
     try {
-      const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(db, 'orders', invoiceId));
+      const cancelData: any = {
+        status: 'CANCELLED',
+        cancelledBy: currentUserId,
+        cancelledAt: new Date().toISOString()
+      };
+      if (reason) {
+        cancelData.notes = reason;
+      }
+
+      await updateDoc(doc(db, 'orders', invoiceId), cancelData);
+      notificationsService.add({
+        title: 'فاتورة ملغاة',
+        message: `تم إلغاء الفاتورة رقم ${invoiceId.slice(0,8)}`,
+        type: 'INVOICE',
+        metadata: { invoiceId }
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `orders/${invoiceId}`);
+    }
+  };
+
+  const deleteInvoice = async (invoiceId: string, reason?: string) => {
+    await cancelInvoice(invoiceId, reason || 'تم إلغاء الفاتورة بواسطة المستخدم.');
+  };
+
+  const requestBranchTransfer = async (params: {
+    fromBranchId: string;
+    fromBranchName: string;
+    toBranchId: string;
+    toBranchName: string;
+    productId: string;
+    productName: string;
+    quantity: number;
+  }): Promise<boolean> => {
+    try {
+      const id = `BR-${Date.now().toString(36).toUpperCase()}`;
+      const transactionData = {
+        id,
+        type: 'TRANSFER',
+        status: 'PENDING',
+        fromWarehouseId: params.fromBranchId,
+        toWarehouseId: params.toBranchId,
+        items: [{
+          productId: params.productId,
+          productName: params.productName,
+          quantity: params.quantity,
+        }],
+        reference: 'BRANCH_REQUEST',
+        notes: `طلب تحويل من ${params.fromBranchName} → ${params.toBranchName} بواسطة الكاشير`,
+        createdAt: new Date().toISOString(),
+        createdBy: user?.uid || 'cashier',
+        requestedByBranch: params.toBranchId,
+      };
+
+      console.log('Submitting branch transfer request:', transactionData);
+      await setDoc(doc(db, 'inventory_transactions', id), transactionData);
+      console.log('Transfer request saved to Firestore successfully');
+
+      // Send admin notification
+      await notificationsService.add({
+        title: 'طلب تحويل مخزون',
+        message: `الفرع "${params.toBranchName}" يطلب ${params.quantity} قطعة من "${params.productName}" من فرع "${params.fromBranchName}"`,
+        type: 'TRANSFER',
+        metadata: { transferId: id, fromBranchId: params.fromBranchId, toBranchId: params.toBranchId },
+      });
+      console.log('Notification sent successfully');
+
+      return true;
+    } catch (error: any) {
+      console.error('Error requesting branch transfer:', error);
+      alert(`خطأ في إرسال الطلب: ${error?.message || 'خطأ غير معروف'}`);
+      return false;
     }
   };
 
@@ -204,7 +346,8 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <POSContext.Provider value={{ 
       shifts, openShift, closeShift, getOpenShift, 
       invoices, addInvoice, updateInvoice, deleteInvoice,
-      newTransferAlert, clearTransferAlert: () => setNewTransferAlert(null)
+      newTransferAlert, clearTransferAlert: () => setNewTransferAlert(null),
+      requestBranchTransfer,
     }}>
       {children}
     </POSContext.Provider>

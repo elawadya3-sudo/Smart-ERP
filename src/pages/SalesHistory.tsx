@@ -15,90 +15,63 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { Order, Warehouse } from '../types';
+import { useSearchParams } from 'react-router-dom';
 import { INITIAL_WAREHOUSES } from '../constants';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useEffect } from 'react';
 
-const MOCK_SALES: Order[] = [
-  {
-    id: 'INV-A3B4C5',
-    items: [{ productId: 'p1', name: 'آيفون 15 برو', quantity: 1, price: 5000, total: 5000 }],
-    subtotal: 5000,
-    tax: 750,
-    discount: 0,
-    total: 5750,
-    paymentMethod: 'visa',
-    cashierId: 'admin',
-    branchId: '2',
-    shiftId: 'SHF-OLD001',
-    createdAt: '2024-05-15T10:00:00Z',
-    customerId: '2' // Store ID
-  },
-  {
-    id: 'INV-D6E7F8',
-    items: [{ productId: 'p2', name: 'سامسونج S24', quantity: 2, price: 4500, total: 9000 }],
-    subtotal: 9000,
-    tax: 1350,
-    discount: 0,
-    total: 10350,
-    paymentMethod: 'cash',
-    cashierId: 'admin',
-    branchId: '3',
-    shiftId: 'SHF-OLD002',
-    createdAt: '2024-05-14T15:30:00Z',
-    customerId: '3' // Store ID
-  },
-  {
-    id: 'INV-G9H0I1',
-    items: [{ productId: 'p1', name: 'آيفون 15 برو', quantity: 1, price: 5000, total: 5000 }],
-    subtotal: 5000,
-    tax: 750,
-    discount: 0,
-    total: 5750,
-    paymentMethod: 'cash',
-    cashierId: 'admin',
-    branchId: '2',
-    shiftId: 'SHF-OLD003',
-    createdAt: '2024-05-15T12:00:00Z',
-    customerId: '2' // Store ID
-  }
-];
-
-import { usePOS } from '../context/POSContext';
-
 export default function SalesHistory() {
-  const { invoices: contextInvoices } = usePOS();
+  const [orders, setOrders] = useState<Order[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('ALL');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const qW = query(collection(db, 'warehouses'));
-    const unsubscribe = onSnapshot(qW, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Warehouse));
-      setWarehouses(docs.length > 0 ? docs : INITIAL_WAREHOUSES);
+    setLoading(true);
+    const qO = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsubOrders = onSnapshot(qO, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setOrders(docs);
+      setLoading(false);
     });
-    return () => unsubscribe();
+
+    const qW = query(collection(db, 'warehouses'));
+    const unsubWarehouses = onSnapshot(qW, (snapshot) => {
+      setWarehouses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Warehouse)));
+    });
+
+    return () => {
+      unsubOrders();
+      unsubWarehouses();
+    };
   }, []);
 
   const branches = warehouses.filter(w => (w as any).type !== 'MAIN' && w.id !== '1');
 
-  // Combine mock and real invoices
-  const allInvoices = [...contextInvoices, ...MOCK_SALES];
+  const filteredInvoices = orders.filter(inv => {
+    // Exclude Expenses from sales history
+    if (inv.customerId === 'EXPENSE') return false;
 
-  const filteredInvoices = allInvoices.filter(inv => {
     const matchesSearch = String(inv.id).toLowerCase().includes(searchTerm.toLowerCase()) || 
                          (inv.shiftId && String(inv.shiftId).toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesBranch = selectedBranch === 'ALL' || inv.branchId === selectedBranch || inv.customerId === selectedBranch;
-    const matchesDate = !selectedDate || inv.createdAt.startsWith(selectedDate);
+    const matchesBranch = selectedBranch === 'ALL' || String(inv.branchId) === String(selectedBranch);
+    
+    const dateObj = new Date(inv.createdAt && typeof (inv.createdAt as any).toDate === 'function' 
+      ? (inv.createdAt as any).toDate() 
+      : inv.createdAt);
+    const localDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    const matchesDate = !selectedDate || localDate === selectedDate;
+    
     return matchesSearch && matchesBranch && matchesDate;
   });
 
-  const getBranchName = (id: string) => {
-    return warehouses.find(w => w.id === id)?.name || 'غير معروف';
+  const getBranchName = (id: any) => {
+    if (!id) return 'غير محدد';
+    return warehouses.find(w => String(w.id) === String(id))?.name || `فرع (${id})`;
   };
 
   return (
@@ -227,7 +200,7 @@ export default function SalesHistory() {
                              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
                                 <Building2 className="w-4 h-4" />
                              </div>
-                             <span className="font-bold text-gray-700 text-sm">{getBranchName(inv.customerId || '')}</span>
+                             <span className="font-bold text-gray-700 text-sm">{getBranchName(inv.branchId || '')}</span>
                           </div>
                        </td>
                        <td className="px-8 py-6">
@@ -290,7 +263,7 @@ export default function SalesHistory() {
                     <p className="text-sm font-black text-gray-400 uppercase tracking-widest leading-none mb-3">بيانات الفرع</p>
                     <div className="flex items-center gap-3">
                        <Building2 className="w-5 h-5 text-blue-600" />
-                       <span className="font-bold text-gray-800">{getBranchName(selectedInvoice.customerId || '')}</span>
+                       <span className="font-bold text-gray-800">{getBranchName(selectedInvoice.branchId || '')}</span>
                     </div>
                  </div>
                  <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100">

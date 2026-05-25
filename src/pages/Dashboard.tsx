@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -7,7 +7,13 @@ import {
   AlertCircle, 
   Clock, 
   ChevronLeft,
-  ShoppingCart
+  ShoppingCart,
+  Loader2,
+  Calendar,
+  Bell,
+  CreditCard,
+  Wallet,
+  Banknote
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -23,257 +29,315 @@ import {
 } from 'recharts';
 import { cn, formatCurrency } from '../lib/utils';
 import { motion } from 'motion/react';
-
-const salesData = [
-  { name: 'الأحد', sales: 4000 },
-  { name: 'الاثنين', sales: 3000 },
-  { name: 'الثلاثاء', sales: 2000 },
-  { name: 'الأربعاء', sales: 2780 },
-  { name: 'الخميس', sales: 1890 },
-  { name: 'الجمعة', sales: 2390 },
-  { name: 'السبت', sales: 3490 },
-];
-
-const topProducts = [
-  { name: 'Nike Air Max', sales: 120, revenue: 45000, color: '#3b82f6' },
-  { name: 'Adidas Ultraboost', sales: 98, revenue: 38000, color: '#8b5cf6' },
-  { name: 'Puma RS-X', sales: 85, revenue: 22000, color: '#f59e0b' },
-  { name: 'Jordan 1 Retro', sales: 72, revenue: 64000, color: '#ef4444' },
-  { name: 'New Balance 550', sales: 65, revenue: 19000, color: '#10b981' },
-];
-
-function StatCard({ title, value, change, trend, icon: Icon, color }: any) {
-  return (
-    <motion.div 
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all"
-    >
-      <div className="flex flex-col">
-        <p className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">{title}</p>
-        <div className="flex items-end justify-between">
-          <h3 className="text-2xl font-black text-gray-900 tracking-tight">{value}</h3>
-          <span className={cn(
-            "text-sm font-bold px-2 py-1 rounded",
-            trend === 'up' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
-          )}>
-            {trend === 'up' ? '+' : ''}{change}
-          </span>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { Order, Product } from '../types';
+import { 
+  aggregateSalesData, 
+  calculateDashboardStats, 
+  getTopSellingProducts,
+  AnalyticsPeriod 
+} from '../utils/analytics';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<AnalyticsPeriod>('weekly');
+
+  useEffect(() => {
+    setLoading(true);
+    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setOrders(ordersData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching orders:', error);
+      setLoading(false);
+    });
+
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(productsData);
+    }, (error) => {
+      console.error('Error fetching products:', error);
+    });
+
+    return () => {
+      unsubOrders();
+      unsubProducts();
+    };
+  }, []);
+
+  const [cashTxs, setCashTxs] = useState<any[]>([]);
+  const [notifs, setNotifs] = useState<any[]>([]);
+
+  useEffect(() => {
+    const unsubCash = onSnapshot(collection(db, 'cash_transactions'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCashTxs(data);
+    }, (err) => console.error('cash txs error', err));
+
+    const unsubNot = onSnapshot(collection(db, 'notifications'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNotifs(data.slice(0, 20));
+    }, (err) => console.error('notifications error', err));
+
+    return () => { unsubCash(); unsubNot(); };
+  }, []);
+
+  const parseDate = (d: any) => (d && typeof d.toDate === 'function') ? d.toDate() : new Date(d);
+
+  const stats = calculateDashboardStats(orders, products);
+  const chartData = aggregateSalesData(orders, period);
+  const topSelling = getTopSellingProducts(orders.filter(o => (o.status === 'COMPLETED' || !o.status) && o.customerId !== 'EXPENSE'));
+  const lowStockCount = products.filter(p => (p.quantity || 0) <= ((p as any).minStock || 5)).length;
+
+  const today = new Date();
+  const isSameDay = (d: Date) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+
+  const salesToday = orders
+    .filter(o => isSameDay(parseDate(o.createdAt)) && (o.status === 'COMPLETED' || !o.status) && o.customerId !== 'EXPENSE')
+    .reduce((s, o) => s + (o.total || 0), 0);
+
+  const salesThisMonth = orders
+    .filter(o => {
+      const dt = parseDate(o.createdAt);
+      return dt.getFullYear() === today.getFullYear() && dt.getMonth() === today.getMonth() && (o.status === 'COMPLETED' || !o.status) && o.customerId !== 'EXPENSE';
+    })
+    .reduce((s, o) => s + (o.total || 0), 0);
+
+  // Total purchases derived from cash transactions (PAYMENT)
+  const totalPurchases = cashTxs.filter(t => t.type === 'PAYMENT').reduce((s, t) => s + (t.amount || 0), 0);
+
+  // Profit approximation: order items revenue - products cost
+  const approxProfit = orders.reduce((acc, o) => {
+    const itemsProfit = (o.items || []).reduce((ia, it) => {
+      const prod = products.find(p => p.id === it.productId);
+      const cost = prod?.costPrice || 0;
+      return ia + ((it.price || 0) - cost) * (it.quantity || 0);
+    }, 0);
+    return acc + itemsProfit;
+  }, 0);
+
+  const cashBalance = cashTxs.filter(t => !/bank|بنك/i.test(t.accountName || '')).reduce((s, t) => {
+    return s + ((t.type === 'RECEIPT') ? (t.amount || 0) : -(t.amount || 0));
+  }, 0);
+
+  const bankBalance = cashTxs.filter(t => /bank|بنك/i.test(t.accountName || '')).reduce((s, t) => {
+    return s + ((t.type === 'RECEIPT') ? (t.amount || 0) : -(t.amount || 0));
+  }, 0);
+
+  // recent operations (mix orders and cash txs)
+  const recentOps = [
+    ...orders.map(o => ({ type: 'order', ts: parseDate(o.createdAt), data: o })),
+    ...cashTxs.map(c => ({ type: 'cash', ts: parseDate(c.createdAt), data: c }))
+  ].sort((a, b) => b.ts.getTime() - a.ts.getTime()).slice(0, 8);
+
+  const periods: { id: AnalyticsPeriod, label: string }[] = [
+    { id: 'daily', label: 'يومي' },
+    { id: 'weekly', label: 'أسبوعي' },
+    { id: 'monthly', label: 'شهري' },
+    { id: 'yearly', label: 'سنوي' }
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <p className="text-gray-500 font-bold animate-pulse">جاري تحميل التحليلات...</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <p className="text-gray-500 font-bold animate-pulse">جاري تحميل التحليلات...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 tracking-tight">لوحة التحكم</h2>
-          <p className="text-gray-500 mt-1">مرحباً بك، إليك ملخص مبيعات اليوم</p>
+          <p className="text-gray-500 mt-1">ملخص شامل للمبيعات، المشتريات، المخزون، والإشعارات.</p>
         </div>
-        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-          <button className="flex-1 sm:flex-none justify-center bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 font-medium text-sm flex items-center gap-2 hover:bg-gray-50 shadow-sm transition-all min-h-[44px]">
-            <Clock className="w-4 h-4" />
-            آخر 7 أيام
-          </button>
-          <button className="flex-1 sm:flex-none justify-center bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all min-h-[44px]">
-            تصدير تقرير
-          </button>
-        </div>
+        <button className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-200 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all w-full sm:w-auto">
+          <Calendar className="w-5 h-5" />
+          تصدير التقرير
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="مبيعات اليوم" 
-          value={formatCurrency(12450)} 
-          change="+12.5%" 
-          trend="up"
-          icon={BarChart3}
-          color="bg-blue-600"
-        />
-        <StatCard 
-          title="طلبات جديدة" 
-          value="48" 
-          change="+8.2%" 
-          trend="up"
-          icon={ShoppingCart}
-          color="bg-purple-600"
-        />
-        <StatCard 
-          title="متوسط قيمة السلة" 
-          value={formatCurrency(260)} 
-          change="-2.4%" 
-          trend="down"
-          icon={TrendingUp}
-          color="bg-orange-600"
-        />
-        <StatCard 
-          title="مخزون منخفض" 
-          value="12 منتج" 
-          change="تنبيه" 
-          trend="down"
-          icon={AlertCircle}
-          color="bg-red-600"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <StatCard title="مبيعات اليوم" value={formatCurrency(salesToday)} icon={BarChart3} trend={salesToday >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} />
+        <StatCard title="مبيعات الشهر" value={formatCurrency(salesThisMonth)} icon={Calendar} trend={salesThisMonth >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} />
+        <StatCard title="إجمالي المشتريات" value={formatCurrency(totalPurchases)} icon={CreditCard} trend={totalPurchases >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports')} />
+        <StatCard title="الأرباح" value={formatCurrency(approxProfit)} icon={TrendingUp} trend={approxProfit >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=profit')} />
+        <StatCard title="أرصدة الصناديق" value={formatCurrency(cashBalance)} icon={Wallet} trend={cashBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} />
+        <StatCard title="أرصدة البنوك" value={formatCurrency(bankBalance)} icon={Banknote} trend={bankBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} />
+        <StatCard title="المنتجات منخفضة المخزون" value={`${lowStockCount} منتج`} icon={AlertCircle} trend="down" change=" " onClick={() => navigate('/inventory/reports')} />
+        <StatCard title="إشعارات النظام" value={`${notifs.length} إشعار`} icon={Bell} trend="up" change=" " onClick={() => navigate('/reports')} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <motion.div 
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h4 className="text-lg font-bold text-gray-900">تحليلات المبيعات الأسبوعية</h4>
-            <div className="flex items-center gap-2 text-sm font-bold">
-              <span className="flex items-center gap-1.5 text-blue-600">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                هذا الأسبوع
-              </span>
+      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-8">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h4 className="text-xl font-bold text-gray-900">ملخص المبيعات</h4>
+              <p className="text-sm text-gray-500 mt-1">عرض تطور المبيعات حسب الفترة التي تختارها.</p>
+            </div>
+            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-100">
+              {periods.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id)}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                    period === p.id
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
-          <div className="h-[350px] w-full">
+          <div className="h-[360px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#6b7280' }} 
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#6b7280' }}
-                  tickFormatter={(val) => `${val/1000}k`}
-                />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="#3b82f6" 
-                  strokeWidth={3} 
-                  fillOpacity={1} 
-                  fill="url(#colorSales)" 
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val} />
+                <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} labelStyle={{ fontWeight: 'bold', marginBottom: 4 }} formatter={(value: any) => [formatCurrency(value), 'المبيعات']} />
+                <Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="text-lg font-bold text-gray-800">الأكثر مبيعاً</h4>
-            <button className="text-blue-600 text-sm font-black hover:underline uppercase tracking-widest">عرض الكل</button>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h4 className="text-lg font-bold text-gray-900">إشعارات النظام</h4>
+              <p className="text-sm text-gray-400">آخر التنبيهات والإشعارات المرتبطة بالنظام.</p>
+            </div>
+            <Bell className="w-5 h-5 text-blue-600" />
           </div>
-          <div className="space-y-4 flex-1">
-            {topProducts.map((product, idx) => (
-              <div key={idx} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl border border-transparent hover:border-gray-100 transition-all cursor-pointer group">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center p-2 group-hover:bg-white transition-colors">
-                  <Package className="text-gray-400 w-6 h-6" />
+          <div className="divide-y divide-gray-100">
+            {notifs.length > 0 ? notifs.map((notif, idx) => (
+              <div key={notif.id || idx} className="px-6 py-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-gray-900 truncate">{notif.title || notif.message || 'تنبيه جديد'}</p>
+                  <span className="text-[11px] uppercase tracking-widest text-gray-400">{new Date(parseDate(notif.createdAt)).toLocaleDateString('ar-EG')}</span>
                 </div>
-                <div className="flex-1 min-w-0 text-right">
-                  <h4 className="text-sm font-bold text-gray-900 truncate">{product.name}</h4>
-                  <p className="text-sm text-gray-500 font-bold uppercase tracking-tight">{product.sales} وحدة مباعة</p>
-                </div>
-                <div className="text-left">
-                  <span className="text-sm font-black text-blue-600 block">{formatCurrency(product.revenue)}</span>
-                </div>
+                <p className="mt-2 text-sm text-gray-500">{notif.description || notif.message || 'تفاصيل الإشعار غير متاحة'}</p>
               </div>
-            ))}
+            )) : (
+              <div className="px-6 py-10 text-center text-gray-400">لا توجد إشعارات حالياً</div>
+            )}
           </div>
-          <button className="w-full py-3 mt-4 text-sm font-bold text-blue-600 border border-blue-50 rounded-xl hover:bg-blue-50 transition-colors uppercase tracking-widest">عرض تقرير المبيعات كاملاً</button>
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col"
-        >
-          <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-             <h4 className="text-sm font-bold">آخر الفواتير الصادرة</h4>
-             <button className="text-sm font-bold text-gray-400 hover:text-blue-600 uppercase tracking-widest">شاهد الكل</button>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h4 className="text-lg font-bold text-gray-900">أفضل المنتجات مبيعاً</h4>
+              <p className="text-sm text-gray-400">المنتجات الأعلى مبيعاً خلال الفترة الحالية.</p>
+            </div>
+            <Package className="w-5 h-5 text-gray-400" />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-right">
-              <thead className="bg-gray-50 text-sm text-gray-400 uppercase font-black">
-                <tr className="border-b border-gray-100">
-                  <th className="px-6 py-3 tracking-widest">الفاتورة</th>
-                  <th className="px-6 py-3 tracking-widest">العميل</th>
-                  <th className="px-6 py-3 tracking-widest text-left">القيمة</th>
-                  <th className="px-6 py-3 tracking-widest text-center">الحالة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-sm">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <tr key={i} className="group hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3 font-mono font-medium text-gray-900">#INV-882{i}</td>
-                    <td className="px-6 py-3 text-gray-600">عميل نقدي</td>
-                    <td className="px-6 py-3 text-left font-black text-blue-600">{formatCurrency(750)}</td>
-                    <td className="px-6 py-3 text-center">
-                      <span className="inline-block px-3 py-1 rounded-full bg-green-50 text-green-600 text-sm font-bold">مدفوع</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3 p-6">
+            {topSelling.length > 0 ? topSelling.map((product, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-4 p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div>
+                  <p className="text-sm font-black text-gray-900 truncate">{product.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">{product.sales} وحدة</p>
+                </div>
+                <span className="text-sm font-black text-blue-600">{formatCurrency(product.revenue)}</span>
+              </div>
+            )) : (
+              <div className="text-center py-10 text-gray-400">لا توجد بيانات مبيعات</div>
+            )}
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
-        >
-          <h4 className="text-lg font-bold mb-6">التحليل حسب الفئة</h4>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topProducts} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 11, fill: '#6b7280' }}
-                  width={100}
-                />
-                <Tooltip 
-                   cursor={{ fill: 'transparent' }}
-                   contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="revenue" radius={[0, 10, 10, 0]}>
-                  {topProducts.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h4 className="text-lg font-bold text-gray-900">آخر العمليات</h4>
+              <p className="text-sm text-gray-400">أحدث الفواتير والحركات المالية على النظام.</p>
+            </div>
+            <Clock className="w-5 h-5 text-gray-400" />
+          </div>
+          <div className="divide-y divide-gray-100">
+            {recentOps.length > 0 ? recentOps.map((item, idx) => (
+              <div key={`${item.type}-${item.data.id || idx}`} className="px-6 py-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[11px] uppercase tracking-widest text-gray-400">{item.type === 'order' ? 'فاتورة' : 'حركة نقدية'}</span>
+                  <span className="text-[11px] text-gray-400">{item.ts.toLocaleDateString('ar-EG')}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-4">
+                  <p className="text-sm font-bold text-gray-900 truncate">{item.type === 'order' ? `فاتورة ${item.data.id.slice(-6).toUpperCase()}` : item.data.reference || 'عملية نقدية'}</p>
+                  <span className="text-sm font-black text-gray-900">{formatCurrency(item.data.total || item.data.amount || 0)}</span>
+                </div>
+              </div>
+            )) : (
+              <div className="px-6 py-10 text-center text-gray-400">لا توجد عمليات حديثة</div>
+            )}
           </div>
         </motion.div>
       </div>
     </div>
+  );
+}
+
+function StatCard({ title, value, change, trend, icon: Icon, onClick }: any) {
+  return (
+    <motion.div 
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      className={cn(
+        "bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group transition-all",
+        onClick ? 'cursor-pointer hover:shadow-md' : ''
+      )}
+    >
+      <div className="flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">{title}</p>
+          <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+            <Icon className="w-4 h-4" />
+          </div>
+        </div>
+        <div className="flex items-end justify-between">
+          <h3 className="text-2xl font-black text-gray-900 tracking-tight">{value}</h3>
+          <div className={cn(
+            "flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg",
+            trend === 'up' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+          )}>
+            {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            {change}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 

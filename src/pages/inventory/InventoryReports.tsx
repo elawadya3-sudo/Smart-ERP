@@ -13,7 +13,7 @@ import {
   Tags,
   Search,
   Layers,
-  History,
+  History as HistoryIcon,
   ShoppingCart,
   Calendar
 } from 'lucide-react';
@@ -51,7 +51,7 @@ const REPORT_MENU = [
   { id: 'STOCK_BALANCE', title: 'تقرير أرصدة المخازن', icon: WarehouseIcon },
   { id: 'INVENTORY_COST', title: 'تقرير تكلفة المخزون', icon: TrendingUp },
   { id: 'PRODUCT_CARD', title: 'بطاقة صنف المخزن', icon: Package },
-  { id: 'DETAILED_CARD', title: 'بطاقة صنف المخزن مفصلة', icon: History },
+  { id: 'DETAILED_CARD', title: 'بطاقة صنف المخزن مفصلة', icon: HistoryIcon },
   { id: 'WORK_ORDERS', title: 'تقرير أوامر شغل', icon: ClipboardList },
   { id: 'SERIALS_AVAILABILITY', title: 'تقرير سرايل الأصناف المتاحة', icon: Tags },
   { id: 'SERIAL_SEARCH', title: 'الكشف عن مسلسل صنف', icon: Search },
@@ -410,7 +410,7 @@ export default function InventoryReportsPage() {
                   <p className="font-bold text-gray-900">غير معروف</p>
                </div>
                <div className="bg-gray-50 p-6 rounded-3xl border border-dashed border-gray-200 flex flex-col items-center text-center opacity-40">
-                  <History className="w-8 h-8 mb-2" />
+                  <HistoryIcon className="w-8 h-8 mb-2" />
                   <p className="text-sm font-black uppercase text-gray-400">تاريخ الشراء</p>
                   <p className="font-bold text-gray-900">N/A</p>
                </div>
@@ -510,7 +510,7 @@ export default function InventoryReportsPage() {
         return (
           <div className="flex flex-col items-center justify-center py-24 text-center space-y-6">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center text-gray-200">
-               <History size={64} />
+               <HistoryIcon size={64} />
             </div>
             <div>
                <h3 className="text-2xl font-black text-gray-900 mb-2">بطاقة صنف المخزن مفصلة</h3>

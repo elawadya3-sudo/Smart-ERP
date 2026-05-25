@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { POSProvider } from './context/POSContext';
+import { SuperAdminProvider, useSuperAdmin } from './context/SuperAdminContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -17,6 +19,7 @@ import WarehouseDetails from './pages/inventory/WarehouseDetails';
 import GoodsReceipt from './pages/inventory/GoodsReceipt';
 import InventoryReports from './pages/inventory/InventoryReports';
 import StockTransfers from './pages/inventory/Transfers';
+import StockTaking from './pages/inventory/StockTaking';
 import AddProduct from './pages/products/AddProduct';
 import AccountingDashboard from './pages/accounting/AccountingDashboard';
 import ChartOfAccounts from './pages/accounting/ChartOfAccounts';
@@ -34,57 +37,116 @@ import CashReports from './pages/CashReports';
 import CashierManagement from './pages/CashierManagement';
 import BranchManagement from './pages/BranchManagement';
 import Login from './pages/Login';
+import { useMainStoreSettings } from './hooks/useMainStoreSettings';
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <POSProvider>
-        <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          
-          <Route element={
-            <ProtectedRoute>
-              <MainLayout />
-            </ProtectedRoute>
-          }>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/pos" element={<POS />} />
-            <Route path="/branch-management" element={<BranchManagement />} />
-            <Route path="/inventory">
-              <Route index element={<InventoryDashboard />} />
-              <Route path="warehouses" element={<Warehouses />} />
-              <Route path="warehouses/:id" element={<WarehouseDetails />} />
-              <Route path="products" element={<Products />} />
-              <Route path="products/add" element={<AddProduct />} />
-              <Route path="products/edit/:id" element={<AddProduct />} />
-              <Route path="receipt" element={<GoodsReceipt />} />
-              <Route path="transfers" element={<StockTransfers />} />
-              <Route path="reports" element={<InventoryReports />} />
-            </Route>
-            <Route path="/accounting">
-              <Route index element={<AccountingDashboard />} />
-              <Route path="accounts" element={<ChartOfAccounts />} />
-              <Route path="cost-centers" element={<CostCenters />} />
-              <Route path="journal" element={<JournalEntries />} />
-              <Route path="cash" element={<CashTransactions />} />
-              <Route path="currencies" element={<Currencies />} />
-              <Route path="check-stages" element={<CheckStages />} />
-              <Route path="taxes" element={<Taxes />} />
-            </Route>
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/admin/cashiers" element={<CashierManagement />} />
-            <Route path="/sales/history" element={<SalesHistory />} />
-            <Route path="/cash/reports" element={<CashReports />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </Router>
-    </POSProvider>
-  </AuthProvider>
-  );
+// ─── Super Admin Imports ──────────────────────────────────────────────────────
+import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
+import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
+import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
+import TenantsList from './pages/superadmin/TenantsList';
+import AddEditTenant from './pages/superadmin/AddEditTenant';
+import TenantDetails from './pages/superadmin/TenantDetails';
+
+/** Guard: redirect to /superadmin/login if not authenticated as super admin */
+function SuperAdminGuard({ children }: { children: ReactNode }) {
+  const { isAuthenticated, ready } = useSuperAdmin();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(!ready);
+  }, [ready]);
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a1a]">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/superadmin/login" replace />;
+  }
+
+  return <>{children}</>;
 }
 
+export default function App() {
+  const { settings } = useMainStoreSettings();
+  
+  // Update document title dynamically based on store name
+  useEffect(() => {
+    if (settings?.storeName) {
+      document.title = settings.storeName;
+    } else {
+      document.title = 'Footprint ERP & POS';
+    }
+  }, [settings]);
 
+  return (
+    <SuperAdminProvider>
+      <AuthProvider>
+        <POSProvider>
+          <Router>
+          <Routes>
+            {/* ── Super Admin Routes (fully isolated) ── */}
+            <Route path="/superadmin/login" element={<SuperAdminLogin />} />
+            <Route path="/superadmin" element={
+              <SuperAdminGuard>
+                <SuperAdminLayout />
+              </SuperAdminGuard>
+            }>
+              <Route index element={<SuperAdminDashboard />} />
+              <Route path="tenants" element={<TenantsList />} />
+              <Route path="tenants/new" element={<AddEditTenant />} />
+              <Route path="tenants/:id" element={<TenantDetails />} />
+              <Route path="tenants/:id/edit" element={<AddEditTenant />} />
+            </Route>
 
+            {/* ── Main ERP App Routes ── */}
+            <Route path="/login" element={<Login />} />
+            
+            <Route element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/pos" element={<POS />} />
+              <Route path="/branch-management" element={<BranchManagement />} />
+              <Route path="/inventory">
+                <Route index element={<InventoryDashboard />} />
+                <Route path="warehouses" element={<Warehouses />} />
+                <Route path="warehouses/:id" element={<WarehouseDetails />} />
+                <Route path="products" element={<Products />} />
+                <Route path="products/add" element={<AddProduct />} />
+                <Route path="products/edit/:id" element={<AddProduct />} />
+                <Route path="receipt" element={<GoodsReceipt />} />
+                <Route path="transfers" element={<StockTransfers />} />
+                <Route path="stock-taking" element={<StockTaking />} />
+                <Route path="reports" element={<InventoryReports />} />
+              </Route>
+              <Route path="/accounting">
+                <Route index element={<AccountingDashboard />} />
+                <Route path="accounts" element={<ChartOfAccounts />} />
+                <Route path="cost-centers" element={<CostCenters />} />
+                <Route path="journal" element={<JournalEntries />} />
+                <Route path="cash" element={<CashTransactions />} />
+                <Route path="currencies" element={<Currencies />} />
+                <Route path="check-stages" element={<CheckStages />} />
+                <Route path="taxes" element={<Taxes />} />
+              </Route>
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/admin/cashiers" element={<CashierManagement />} />
+              <Route path="/sales/history" element={<SalesHistory />} />
+              <Route path="/cash/reports" element={<CashReports />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
+          </Routes>
+        </Router>
+      </POSProvider>
+    </AuthProvider>
+  </SuperAdminProvider>
+  );
+}

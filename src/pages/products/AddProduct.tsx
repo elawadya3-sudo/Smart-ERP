@@ -28,7 +28,7 @@ import {
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { collection, addDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, handleFirestoreError, OperationType, storage } from '../../lib/firebase';
 
@@ -40,7 +40,7 @@ const subUnitSchema = z.object({
 
 // Validation Schema
 const productSchema = z.object({
-  sku: z.string().min(1, 'كود الصنف مطلوب'),
+  sku: z.string().optional(),
   name: z.string().min(1, 'اسم الصنف مطلوب'),
   descriptionEn: z.string().optional(),
   modelCode: z.string().optional(),
@@ -48,6 +48,9 @@ const productSchema = z.object({
   location: z.string().optional(),
   originNumber: z.string().optional(),
   tags: z.array(z.string()),
+  weight: z.number().min(0, 'الوزن يجب أن يكون رقمياً').optional(),
+  weightUnit: z.string(),
+  gender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']),
   costPrice: z.number({ invalid_type_error: 'السعر مطلوب' }).min(0, 'سعر التكلفة يجب أن يكون موجباً'),
   sellingPrice: z.number({ invalid_type_error: 'السعر مطلوب' }).min(0, 'سعر البيع يجب أن يكون موجباً'),
   wholesalePrice: z.union([z.number(), z.nan()]).optional().transform(v => Number.isNaN(v) ? undefined : v),
@@ -55,11 +58,11 @@ const productSchema = z.object({
   minSellingPrice: z.union([z.number(), z.nan()]).optional().transform(v => Number.isNaN(v) ? undefined : v),
   referencePrice: z.union([z.number(), z.nan()]).optional().transform(v => Number.isNaN(v) ? undefined : v),
   currency: z.string(),
-  brand: z.string().min(1, 'البراند مطلوب'),
-  category: z.string().min(1, 'القسم مطلوب'),
+  brand: z.string().optional(),
+  category: z.string().optional(),
   shoeType: z.string().optional(),
   unitType: z.enum(['SINGLE', 'MULTIPLE']),
-  mainUnit: z.string().min(1, 'الوحدة الأساسية مطلوبة'),
+  mainUnit: z.string().optional(),
   subUnits: z.array(subUnitSchema).optional(),
   warrantyDuration: z.number().min(0).optional(),
   warrantyUnit: z.enum(['DAYS', 'MONTHS', 'YEARS']).optional(),
@@ -87,7 +90,7 @@ export default function AddProductPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dbBrands, setDbBrands] = useState<{id: string, name: string}[]>([]);
   const [dbCategories, setDbCategories] = useState<{id: string, name: string}[]>([]);
-  const [dbShoeTypes, setDbShoeTypes] = useState<{id: string, name: string}[]>([]);
+  const [dbProductTypes, setDbProductTypes] = useState<{id: string, name: string}[]>([]);
 
   const sections = [
     { id: 'basic', label: 'البيانات الأساسية', icon: Package },
@@ -181,18 +184,19 @@ export default function AddProductPage() {
       loadProduct();
     }
 
-    // Load Brands, Categories & ShoeTypes
-    import('firebase/firestore').then(({ collection, getDocs }) => {
-      getDocs(collection(db, 'brands')).then(snapshot => {
-        setDbBrands(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-      });
-      getDocs(collection(db, 'categories')).then(snapshot => {
-        setDbCategories(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-      });
-      getDocs(collection(db, 'shoe_types')).then(snapshot => {
-        setDbShoeTypes(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-      });
-    });
+    // Load Brands, Categories & Product Types
+    const loadPickers = async () => {
+      const [brandsSnap, categoriesSnap, productTypeSnap] = await Promise.all([
+        getDocs(collection(db, 'brands')),
+        getDocs(collection(db, 'categories')),
+        getDocs(collection(db, 'shoe_types')),
+      ]);
+      setDbBrands(brandsSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
+      setDbCategories(categoriesSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
+      setDbProductTypes(productTypeSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
+    };
+
+    loadPickers();
 
   }, [id, reset]);
 
@@ -417,6 +421,55 @@ export default function AddProductPage() {
                               </div>
                           </div>
                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-black text-gray-500 uppercase tracking-widest mb-2 px-1">كود الموديل</label>
+                            <input
+                              {...register('modelCode')}
+                              type="text"
+                              placeholder="كود الموديل أو الموديل"
+                              className="w-full bg-gray-50 rounded-2xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-black text-gray-500 uppercase tracking-widest mb-2 px-1">رقم المنشأ</label>
+                            <input
+                              {...register('originNumber')}
+                              type="text"
+                              placeholder="رقم المنشأ أو فاتورة المورد"
+                              className="w-full bg-gray-50 rounded-2xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-black text-gray-500 uppercase tracking-widest mb-2 px-1">الموقع</label>
+                            <input
+                              {...register('location')}
+                              type="text"
+                              placeholder="موقع التخزين أو الرف"
+                              className="w-full bg-gray-50 rounded-2xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-black text-gray-500 uppercase tracking-widest mb-2 px-1">الوصف</label>
+                            <textarea
+                              {...register('descriptionEn')}
+                              rows={1}
+                              placeholder="وصف موجز للصنف"
+                              className="w-full bg-gray-50 rounded-3xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all resize-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-black text-gray-500 uppercase tracking-widest mb-2 px-1">الوصف</label>
+                          <textarea
+                            {...register('descriptionEn')}
+                            rows={4}
+                            placeholder="اكتب وصفاً موجزاً للصنف"
+                            className="w-full bg-gray-50 rounded-3xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all resize-none"
+                          />
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2">
                            <div className="space-y-3">
@@ -440,6 +493,20 @@ export default function AddProductPage() {
                                       {tag}
                                     </button>
                                   ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  value={newTag}
+                                  onChange={(e) => setNewTag(e.target.value)}
+                                  onKeyDown={handleAddNewTag}
+                                  placeholder="إضافة وسم جديد ثم اضغط Enter"
+                                  className="flex-1 bg-white border border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => { if (newTag.trim()) { if (!tags.includes(newTag.trim())) setTags([...tags, newTag.trim()]); if (!currentTags.includes(newTag.trim())) toggleTag(newTag.trim()); setNewTag(''); } }}
+                                  className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-sm font-black"
+                                >إضافة</button>
                               </div>
                           </div>
 
@@ -477,14 +544,21 @@ export default function AddProductPage() {
                         </div>
                         <div>
                           <h2 className="text-xl font-black text-gray-900 leading-none">التصنيف والبراند</h2>
-                          <p className="text-sm text-gray-400 font-bold mt-1 uppercase tracking-wider">Category, brand & style classification</p>
+                          <p className="text-sm text-gray-400 font-bold mt-1 uppercase tracking-wider">Category, brand & product classification</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-4">
                               <div className="space-y-2">
-                                <label className="block text-sm font-black text-gray-500 uppercase tracking-widest px-1">البراند (Brand)</label>
+                                <div className="flex items-center justify-between gap-3">
+                                  <label className="block text-sm font-black text-gray-500 uppercase tracking-widest px-1">البراند (Brand)</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate('/inventory/products?tab=settings')}
+                                    className="text-xs font-black uppercase tracking-widest text-blue-600 hover:text-blue-900"
+                                  >إدارة البراندات</button>
+                                </div>
                                 <select 
                                   {...register('brand')}
                                   className={cn(
@@ -501,26 +575,33 @@ export default function AddProductPage() {
                               </div>
 
                               <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-3">
                                   <label className="block text-sm font-black text-gray-500 uppercase tracking-widest px-1">القسم الرئيسي</label>
-                                  <select 
-                                    {...register('category')}
-                                    className={cn(
-                                      "w-full bg-gray-50 border border-transparent rounded-2xl px-5 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all appearance-none",
-                                      errors.category && "border-red-200 bg-white"
-                                    )}
-                                  >
-                                    <option value="">اختر القسم...</option>
-                                    {dbCategories.map(c => (
-                                      <option key={c.id} value={c.name}>{c.name}</option>
-                                    ))}
-                                  </select>
-                                  {errors.category && <p className="text-sm text-red-500 font-bold mt-1.5 mr-2">{errors.category.message}</p>}
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate('/inventory/products?tab=settings')}
+                                    className="text-xs font-black uppercase tracking-widest text-blue-600 hover:text-blue-900"
+                                  >إدارة الأقسام</button>
                                 </div>
+                                <select 
+                                  {...register('category')}
+                                  className={cn(
+                                    "w-full bg-gray-50 border border-transparent rounded-2xl px-5 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all appearance-none",
+                                    errors.category && "border-red-200 bg-white"
+                                  )}
+                                >
+                                  <option value="">اختر القسم...</option>
+                                  {dbCategories.map(c => (
+                                    <option key={c.id} value={c.name}>{c.name}</option>
+                                  ))}
+                                </select>
+                                {errors.category && <p className="text-sm text-red-500 font-bold mt-1.5 mr-2">{errors.category.message}</p>}
+                              </div>
                           </div>
 
                           <div className="space-y-4">
                               <div className="space-y-2">
-                                <label className="block text-sm font-black text-gray-500 uppercase tracking-widest px-1">الجنس (Gender)</label>
+                                <label className="block text-sm font-black text-gray-500 uppercase tracking-widest px-1">الفئة المستهدفة</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {['MEN', 'WOMEN', 'KIDS', 'UNISEX'].map(g => (
                                       <button
@@ -541,13 +622,13 @@ export default function AddProductPage() {
                               </div>
 
                               <div className="space-y-2">
-                                <label className="block text-sm font-black text-gray-600 uppercase tracking-widest px-1 text-indigo-600">نوع الحذاء</label>
+                                <label className="block text-sm font-black text-gray-600 uppercase tracking-widest px-1 text-indigo-600">نوع المنتج</label>
                                 <select 
                                   {...register('shoeType')}
                                   className="w-full bg-indigo-50 border border-transparent rounded-2xl px-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all appearance-none"
                                 >
                                   <option value="">اختر النوع...</option>
-                                  {dbShoeTypes.map(s => (
+                                  {dbProductTypes.map(s => (
                                     <option key={s.id} value={s.name}>{s.name}</option>
                                   ))}
                                 </select>
@@ -759,15 +840,25 @@ export default function AddProductPage() {
                         </div>
                         <h2 className="text-xl font-black text-gray-900">إعدادات المخزون</h2>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                           <label className="block text-sm font-black text-gray-500 uppercase mb-2">الكمية الافتتاحية</label>
                           <input {...register('initialQuantity', { valueAsNumber: true })} type="number" className="w-full bg-gray-50 rounded-2xl px-6 py-4 outline-none" />
                         </div>
                         <div>
-                          <label className="block text-sm font-black text-gray-500 uppercase mb-2">نقطة إعادة الطلب</label>
-                          <input {...register('reorderPoint', { valueAsNumber: true })} type="number" className="w-full bg-gray-50 rounded-2xl px-6 py-4 outline-none" />
+                          <label className="block text-sm font-black text-gray-500 uppercase mb-2">حد المخزون الأدنى</label>
+                          <input {...register('minStock', { valueAsNumber: true })} type="number" className="w-full bg-gray-50 rounded-2xl px-6 py-4 outline-none" />
                         </div>
+                        <div>
+                          <label className="block text-sm font-black text-gray-500 uppercase mb-2">حد المخزون الأعلى</label>
+                          <input {...register('maxStock', { valueAsNumber: true })} type="number" className="w-full bg-gray-50 rounded-2xl px-6 py-4 outline-none" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input {...register('trackInventory')} type="checkbox" className="form-checkbox rounded border-gray-300 text-blue-600" />
+                          <span className="text-sm font-black text-gray-700">تتبع المخزون</span>
+                        </label>
                       </div>
 
                       {/* المقاسات والألوان - تفصيلة للكمية */}

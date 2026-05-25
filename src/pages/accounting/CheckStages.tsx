@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollText, Plus, Search, Filter, CheckCircle2, Clock, ShieldAlert, History } from 'lucide-react';
+import { ScrollText, Plus, Search, Filter, CheckCircle2, Clock, ShieldAlert, History as HistoryIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -43,7 +43,7 @@ export default function CheckStagesPage() {
       <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-gray-50 bg-gray-50/20">
           <h4 className="font-bold text-gray-900 flex items-center gap-2">
-            <History className="w-5 h-5 text-blue-600" />
+            <HistoryIcon className="w-5 h-5 text-blue-600" />
             آخر حركات الشيكات
           </h4>
         </div>

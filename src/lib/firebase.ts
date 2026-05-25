@@ -5,7 +5,25 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+
+// Allow overriding the Firestore Named Database via URL query `?db=...` on tenant admin pages.
+// The Super Admin console itself must always use the main app database.
+const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+const isSuperAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/superadmin');
+const overrideDbFromUrl = urlParams.get('db');
+const overrideDbFromSession = typeof window !== 'undefined' ? sessionStorage.getItem('db_override') : null;
+if (overrideDbFromUrl && typeof window !== 'undefined') {
+  sessionStorage.setItem('db_override', overrideDbFromUrl);
+} else if (typeof window !== 'undefined' && window.location.pathname === '/') {
+  sessionStorage.removeItem('db_override');
+}
+export const MAIN_FIRESTORE_DB_ID = (firebaseConfig as any).firestoreDatabaseId ?? 'default';
+const OVERRIDE_DB = !isSuperAdminRoute ? (overrideDbFromUrl || overrideDbFromSession) : null;
+export const FIRESTORE_DB_ID = (OVERRIDE_DB && OVERRIDE_DB.length > 0)
+  ? OVERRIDE_DB
+  : MAIN_FIRESTORE_DB_ID;
+export const db = getFirestore(app, FIRESTORE_DB_ID);
+export const mainDb = FIRESTORE_DB_ID === MAIN_FIRESTORE_DB_ID ? db : getFirestore(app, MAIN_FIRESTORE_DB_ID);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 

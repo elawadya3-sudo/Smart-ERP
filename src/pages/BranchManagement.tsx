@@ -3,7 +3,7 @@ import {
   TrendingUp,
   ArrowDownCircle,
   Package,
-  History,
+  History as HistoryIcon,
   Banknote,
   Plus,
   X,
@@ -27,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePOS } from '../context/POSContext';
 import { formatCurrency, cn } from '../lib/utils';
 import { Order, Shift, Warehouse } from '../types';
+import { useSearchParams } from 'react-router-dom';
 
 export default function BranchManagement() {
   const { user } = useAuth();
@@ -92,6 +93,34 @@ export default function BranchManagement() {
     }
   }, [user, selectedBranchId]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const invId = searchParams.get('invoiceId');
+    const trId = searchParams.get('transferId');
+
+    if (invId && contextInvoices.length > 0) {
+      const inv = contextInvoices.find(i => String(i.id) === String(invId));
+      if (inv) {
+        setSelectedInvoice(inv);
+        // Clean up URL
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('invoiceId');
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+
+    if (trId) {
+      const element = document.getElementById('transfers-section');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+        // Clean up URL
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('transferId');
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [searchParams, contextInvoices, transfers]);
+
   // Wrap calculation in try-catch for debugging
   let stats: any = { totalSales: 0, cashSales: 0, cardSales: 0, expectedCash: 0, branchTodaySales: 0, soldProductsAggregate: {} };
   let currentShift: any = null;
@@ -104,13 +133,12 @@ export default function BranchManagement() {
     branchWarehouse = warehouses.find(w => w.id === selectedBranchId);
 
     shiftInvoices = currentShift ? contextInvoices.filter(inv => inv && inv.shiftId === currentShift.id) : [];
+    const completedShiftInvoices = shiftInvoices.filter(inv => inv.status === 'COMPLETED' || !inv.status);
+    const pendingShiftInvoices = shiftInvoices.filter(inv => inv.status === 'PENDING');
 
-    // Filter active invoices (not returned)
-    const activeInvoices = shiftInvoices.filter(inv => inv.status !== 'RETURNED');
-
-    // Separate Sales and Expenses for the shift
-    const salesInvoices = activeInvoices.filter(inv => inv && inv.customerId !== 'EXPENSE');
-    const expenseInvoices = activeInvoices.filter(inv => inv && inv.customerId === 'EXPENSE');
+    // Separate Sales and Expenses for the shift (only completed sales should count)
+    const salesInvoices = completedShiftInvoices.filter(inv => inv && inv.customerId !== 'EXPENSE');
+    const expenseInvoices = completedShiftInvoices.filter(inv => inv && inv.customerId === 'EXPENSE');
 
     stats.cashSales = salesInvoices.filter(inv => inv && inv.paymentMethod === 'cash').reduce((acc, inv) => acc + (inv.total || 0), 0);
     stats.cardSales = salesInvoices.filter(inv => inv && inv.paymentMethod === 'visa').reduce((acc, inv) => acc + (inv.total || 0), 0);
@@ -118,11 +146,13 @@ export default function BranchManagement() {
 
     stats.totalExpenses = expenseInvoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
 
+    stats.pendingInvoices = pendingShiftInvoices;
+
     // Expected Cash = Opening + Cash Sales - Expenses
     stats.expectedCash = currentShift ? (currentShift.openingCash || 0) + stats.cashSales - stats.totalExpenses : 0;
 
     // Today's Branch Sales (Filtered for specific branch and not including expenses)
-    branchInvoices = contextInvoices.filter(inv => inv && inv.branchId === selectedBranchId && inv.status !== 'RETURNED' && inv.customerId !== 'EXPENSE');
+    branchInvoices = contextInvoices.filter(inv => inv && inv.branchId === selectedBranchId && (inv.status === 'COMPLETED' || !inv.status) && inv.customerId !== 'EXPENSE');
 
     stats.branchTodaySales = branchInvoices
       .filter(inv => {
@@ -145,13 +175,13 @@ export default function BranchManagement() {
       return acc + invoiceProfit;
     }, 0);
 
-    stats.allBranchInvoices = [...contextInvoices.filter(inv => inv && inv.branchId === selectedBranchId && inv.status !== 'RETURNED')]
+    stats.allBranchInvoices = [...contextInvoices.filter(inv => inv && inv.branchId === selectedBranchId)]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Shifts History
     const closedShifts = contextShifts.filter(s => s.branchId === selectedBranchId && s.status === 'CLOSED');
     stats.branchShiftsHistory = closedShifts.map(shift => {
-      const shiftInvoices = contextInvoices.filter(inv => inv.shiftId === shift.id && inv.status !== 'RETURNED');
+      const shiftInvoices = contextInvoices.filter(inv => inv.shiftId === shift.id && (inv.status === 'COMPLETED' || !inv.status));
       const totalSales = shiftInvoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
       const totalProfit = shiftInvoices.reduce((acc, inv) => {
         const invProfit = (inv.items || []).reduce((pAcc: number, item: any) => {
@@ -167,7 +197,7 @@ export default function BranchManagement() {
     // Active Shifts (for cleanup)
     stats.openShifts = contextShifts.filter(s => s.branchId === selectedBranchId && s.status === 'OPEN');
 
-    stats.soldProductsAggregate = shiftInvoices.reduce((acc: any, inv: any) => {
+    stats.soldProductsAggregate = completedShiftInvoices.reduce((acc: any, inv: any) => {
       if (!inv || !Array.isArray(inv.items)) return acc;
       inv.items.forEach((item: any) => {
         if (!item) return;
@@ -196,6 +226,11 @@ export default function BranchManagement() {
 
   const handleCashExpense = async () => {
     if (!currentShift || !cashExpenseAmount || cashExpenseAmount <= 0) return;
+    if (!user?.uid) {
+      alert('لم يتم تحميل بيانات المستخدم بعد. يرجى تسجيل الدخول أو إعادة تحميل الصفحة.');
+      return;
+    }
+
     const expense: Order = {
       id: `EXP-${Date.now().toString(36).toUpperCase()}`,
       items: [{ productId: 'EXPENSE', name: cashExpenseNote || 'صرف نقدي', quantity: 1, price: cashExpenseAmount, total: cashExpenseAmount }],
@@ -204,7 +239,7 @@ export default function BranchManagement() {
       discount: 0,
       total: cashExpenseAmount,
       paymentMethod: 'cash',
-      cashierId: user?.uid || 'admin',
+      cashierId: user.uid,
       shiftId: currentShift.id,
       branchId: selectedBranchId,
       createdAt: new Date().toISOString(),
@@ -463,9 +498,15 @@ export default function BranchManagement() {
                           <td className="px-6 py-4">
                             <span className={cn(
                               "text-sm font-black px-2 py-1 rounded-full",
-                              inv.status === 'RETURNED' ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+                              inv.status === 'RETURNED' ? "bg-red-50 text-red-600"
+                                : inv.status === 'PENDING' ? "bg-amber-50 text-amber-600"
+                                : inv.status === 'CANCELLED' ? "bg-gray-50 text-gray-600"
+                                : "bg-green-50 text-green-600"
                             )}>
-                              {inv.status === 'RETURNED' ? 'مرتجع' : 'مكتملة'}
+                              {inv.status === 'RETURNED' ? 'مرتجع'
+                                : inv.status === 'PENDING' ? 'معلقة'
+                                : inv.status === 'CANCELLED' ? 'ملغاة'
+                                : 'مكتملة'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -540,7 +581,7 @@ export default function BranchManagement() {
 
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-50 flex items-center gap-3">
-                <History className="w-5 h-5 text-gray-400" />
+                <HistoryIcon className="w-5 h-5 text-gray-400" />
                 <h5 className="font-black text-gray-900 text-sm">سجل العمليات الأخير</h5>
               </div>
               <div className="p-2 divide-y divide-gray-50">
@@ -552,7 +593,9 @@ export default function BranchManagement() {
                       <div className="flex flex-col">
                         <span className="text-sm font-black text-gray-400 uppercase tracking-widest">#{inv.id ? String(inv.id).split('-')[1] || String(inv.id) : '---'}</span>
                         <span className={cn("text-sm font-black", inv.customerId === 'EXPENSE' ? "text-orange-600" : "text-gray-900")}>
-                          {inv.customerId === 'EXPENSE' ? (inv.items?.[0]?.name || 'صرف نقدي') : 'فاتورة بيع'}
+                          {inv.customerId === 'EXPENSE'
+                            ? (inv.items?.[0]?.name || 'صرف نقدي')
+                            : inv.status === 'PENDING' ? 'فاتورة معلقة' : 'فاتورة بيع'}
                         </span>
                       </div>
                       <span className={cn("text-sm font-black font-sans", inv.customerId === 'EXPENSE' ? "text-orange-600" : "text-blue-600")}>
@@ -810,7 +853,7 @@ function AllBranchSalesTable({ invoices, setSelectedInvoice, formatCurrency }: a
       <div className="p-8 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
         <div>
           <h5 className="font-black text-xl text-gray-900 flex items-center gap-3">
-            <History className="w-6 h-6 text-blue-600" />
+            <HistoryIcon className="w-6 h-6 text-blue-600" />
             سجل مبيعات الفرع الإجمالية (كافة العمليات)
           </h5>
           <p className="text-gray-400 text-sm font-medium mt-1">عرض جميع الفواتير والمصروفات الخاصة بهذا الفرع منذ البداية</p>
@@ -845,9 +888,15 @@ function AllBranchSalesTable({ invoices, setSelectedInvoice, formatCurrency }: a
                   <td className="px-8 py-6 text-center">
                     <span className={cn(
                       "text-sm font-black px-3 py-1.5 rounded-full",
-                      inv.status === 'RETURNED' ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+                      inv.status === 'RETURNED' ? "bg-red-50 text-red-600"
+                        : inv.status === 'PENDING' ? "bg-amber-50 text-amber-600"
+                        : inv.status === 'CANCELLED' ? "bg-gray-50 text-gray-600"
+                        : "bg-green-50 text-green-600"
                     )}>
-                      {inv.status === 'RETURNED' ? 'مرتجع' : 'مكتملة'}
+                      {inv.status === 'RETURNED' ? 'مرتجع'
+                        : inv.status === 'PENDING' ? 'معلقة'
+                        : inv.status === 'CANCELLED' ? 'ملغاة'
+                        : 'مكتملة'}
                     </span>
                   </td>
                   <td className="px-8 py-6 text-center">
@@ -863,7 +912,11 @@ function AllBranchSalesTable({ invoices, setSelectedInvoice, formatCurrency }: a
                   <td className="px-8 py-6">
                     <div className="flex flex-col gap-1">
                       <span className={cn("text-sm font-black", inv.customerId === 'EXPENSE' ? "text-orange-600" : "text-gray-900")}>
-                        {inv.customerId === 'EXPENSE' ? (inv.items?.[0]?.name || 'صرف نقدي') : `فاتورة بيع (${inv.items?.length || 0} أصناف)`}
+                        {inv.customerId === 'EXPENSE'
+                          ? (inv.items?.[0]?.name || 'صرف نقدي')
+                          : inv.status === 'PENDING' ? 'فاتورة معلقة'
+                          : inv.status === 'CANCELLED' ? 'فاتورة ملغاة'
+                          : `فاتورة بيع (${inv.items?.length || 0} أصناف)`}
                       </span>
                       {inv.items && inv.items.length > 0 && inv.customerId !== 'EXPENSE' && (
                         <p className="text-sm text-gray-400 font-medium truncate max-w-[300px]">
@@ -1039,7 +1092,7 @@ function ReceivedProductsTable({ transfers, formatCurrency, products }: { transf
     .slice(0, 50);
 
   return (
-    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden mb-8">
+    <div id="transfers-section" className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden mb-8">
       <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">

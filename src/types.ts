@@ -1,5 +1,48 @@
 export type UserRole = 'ADMIN' | 'CASHIER';
 
+// ─── Super Admin / Multi-Tenant Types ────────────────────────────────────────
+export type TenantStatus = 'active' | 'suspended' | 'expired' | 'trial';
+export type TenantPlan = 'basic' | 'pro' | 'enterprise';
+
+export interface Tenant {
+  id: string;
+  name: string;           // اسم الشركة
+  dbId: string;           // اسم Firestore Named Database
+  adminEmail: string;
+  contactPhone?: string;
+  address?: string;
+  status: TenantStatus;
+  plan: TenantPlan;
+  maxUsers?: number;
+  maxBranches?: number;
+  expiresAt: string;      // ISO date string
+  createdAt: string;
+  updatedAt?: string;
+  notes?: string;
+  logoUrl?: string;
+  allowedModules?: string[];
+}
+
+export interface TenantStats {
+  totalOrders?: number;
+  totalRevenue?: number;
+  activeUsers?: number;
+  lastActivity?: string;
+}
+
+export interface UserPermissions {
+  dashboard: boolean;
+  pos: boolean;
+  inventory: boolean;
+  accounting: boolean;
+  customers: boolean;
+  reports: boolean;
+  settings: boolean;
+  branchManagement: boolean;
+  cashierManagement: boolean;
+  systemReset: boolean;
+}
+
 export interface User {
   uid: string;
   email: string;
@@ -7,7 +50,9 @@ export interface User {
   role: UserRole;
   branchId?: string; // Assigned branch for cashiers
   isActive?: boolean; // Whether the user can login
+  permissions?: UserPermissions;
   createdAt: string;
+  isRoot?: boolean; // المدير المطور الرئيسي المخفي
 }
 
 export interface Product {
@@ -69,7 +114,8 @@ export interface Order {
   cashierId: string;
   shiftId: string;
   createdAt: string;
-  status?: 'COMPLETED' | 'RETURNED';
+  status: 'COMPLETED' | 'RETURNED' | 'PENDING' | 'CANCELLED';
+  notes?: string;
 }
 
 export interface Shift {
@@ -153,10 +199,35 @@ export interface Account {
   code: string;
   name: string;
   type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
-  parentAccountId?: string;
+  nature: 'DEBIT' | 'CREDIT';
+  parentAccountId?: string | null;
+  openingBalance: number;
   balance: number;
   currency: string;
+  branchId?: string;
+  costCenterId?: string;
   isActive: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
+export interface CostCenter {
+  id: string;
+  code: string;
+  name: string;
+  type: 'MAIN' | 'SUB'; // MAIN for grouping, SUB for actual tracking
+  branchId?: string | null;
+  budget: number;
+  expenses: number;
+  revenues: number;
+  isActive: boolean;
+  parentCostCenterId?: string | null;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy: string;
 }
 
 export interface JournalEntry {
@@ -177,9 +248,13 @@ export interface JournalEntry {
   createdBy: string;
 }
 
-export interface CostCenter {
+export interface AppNotification {
   id: string;
-  code: string;
-  name: string;
-  isActive: boolean;
+  title: string;
+  message: string;
+  type: 'INVOICE' | 'RETURN' | 'TRANSFER' | 'SYSTEM';
+  isRead: boolean;
+  createdAt: any;
+  userId?: string;
+  metadata?: any;
 }

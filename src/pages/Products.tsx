@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -24,10 +24,14 @@ import CategoriesAndBrands from './products/CategoriesAndBrands';
 
 export default function Products() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'products' | 'settings'>('products');
+  const initialTab = new URLSearchParams(location.search).get('tab') === 'settings' ? 'settings' : 'products';
+  const [activeTab, setActiveTab] = useState<'products' | 'settings'>(initialTab);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   
   const loadProducts = async () => {
     setLoading(true);
@@ -45,6 +49,11 @@ export default function Products() {
     loadProducts();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setActiveTab(params.get('tab') === 'settings' ? 'settings' : 'products');
+  }, [location.search]);
+
   const handleDeleteProduct = async (id: string) => {
     if (window.confirm('هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.')) {
       try {
@@ -53,6 +62,41 @@ export default function Products() {
       } catch (error) {
         console.error(error);
         alert('حدث خطأ أثناء الحذف');
+      }
+    }
+  };
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProductIds.length === filteredProducts.length) {
+      setSelectedProductIds([]);
+    } else {
+      setSelectedProductIds(filteredProducts.map(p => p.id));
+    }
+  };
+
+  const handleBulkDeleteProducts = async () => {
+    if (selectedProductIds.length === 0) return;
+    const confirmMessage = `هل أنت متأكد من حذف ${selectedProductIds.length} منتج(ات)؟ لا يمكن التراجع عن هذا الإجراء.`;
+    if (window.confirm(confirmMessage)) {
+      setDeleteLoading(true);
+      try {
+        for (const id of selectedProductIds) {
+          await deleteDoc(doc(db, 'products', id));
+        }
+        setSelectedProductIds([]);
+        loadProducts();
+        alert(`تم حذف ${selectedProductIds.length} منتج(ات) بنجاح!`);
+      } catch (error) {
+        console.error(error);
+        alert('حدث خطأ أثناء حذف المنتجات المحددة');
+      } finally {
+        setDeleteLoading(false);
       }
     }
   };
@@ -133,6 +177,21 @@ export default function Products() {
             <button className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-600">نشط</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-600">منتهي</button>
           </div>
+          {selectedProductIds.length > 0 && (
+            <div className="h-10 w-[1px] bg-gray-100 mx-2"></div>
+          )}
+          {selectedProductIds.length > 0 && (
+            <motion.button
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={handleBulkDeleteProducts}
+              disabled={deleteLoading}
+              className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-100 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-4 h-4" />
+              حذف {selectedProductIds.length}
+            </motion.button>
+          )}
         </div>
       </div>
 
@@ -140,8 +199,18 @@ export default function Products() {
         <table className="w-full text-right">
           <thead>
             <tr className="bg-gray-50 text-sm text-gray-400 uppercase font-black border-b border-gray-100">
+              <th className="px-8 py-4 w-12">
+                <input
+                  type="checkbox"
+                  checked={selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  title="اختر الكل"
+                />
+              </th>
               <th className="px-8 py-4 tracking-widest">اسم المنتج</th>
               <th className="px-8 py-4 tracking-widest">الماركة</th>
+              <th className="px-8 py-4 tracking-widest">الباركود</th>
               <th className="px-8 py-4 tracking-widest">الفئة</th>
               <th className="px-8 py-4 tracking-widest">السعر</th>
               <th className="px-8 py-4 tracking-widest">الكمية</th>
@@ -153,17 +222,25 @@ export default function Products() {
             {loading ? (
               [1, 2, 3, 4].map(i => (
                 <tr key={i} className="animate-pulse">
-                  <td colSpan={7} className="px-8 py-6 h-20 bg-gray-50/50 rounded-lg m-2"></td>
+                  <td colSpan={8} className="px-8 py-6 h-20 bg-gray-50/50 rounded-lg m-2"></td>
                 </tr>
               ))
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-8 py-20 text-center text-gray-400 font-medium">
+                <td colSpan={8} className="px-8 py-20 text-center text-gray-400 font-medium">
                   لا توجد منتجات مطابقة للبحث
                 </td>
               </tr>
             ) : filteredProducts.map((product) => (
-              <tr key={product.id} className="group hover:bg-blue-50/30 transition-colors">
+              <tr key={product.id} className={cn("group transition-colors", selectedProductIds.includes(product.id) ? "bg-blue-50/50 hover:bg-blue-50/70" : "hover:bg-blue-50/30")}>
+                <td className="px-8 py-6 w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedProductIds.includes(product.id)}
+                    onChange={() => toggleSelectProduct(product.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </td>
                 <td className="px-8 py-6">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center p-2 group-hover:bg-white transition-colors">
@@ -177,6 +254,9 @@ export default function Products() {
                 </td>
                 <td className="px-8 py-6">
                   <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full">{product.brand}</span>
+                </td>
+                <td className="px-8 py-6">
+                  <span className="text-sm font-bold text-gray-700">{product.barcode || 'N/A'}</span>
                 </td>
                 <td className="px-8 py-6">
                   <div className="flex items-center gap-2 text-gray-500">
