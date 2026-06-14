@@ -56,7 +56,7 @@ export default function Reports() {
 
         const ordersData = ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
         const warehousesData = warehousesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Warehouse));
-        const cashiersData = cashiersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        const cashiersData = cashiersSnap.docs.map(doc => ({ id: doc.id, uid: doc.id, ...doc.data() } as unknown as User));
         const productsData = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 
         setOrders(ordersData);

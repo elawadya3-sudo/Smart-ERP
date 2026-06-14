@@ -28,7 +28,7 @@ interface Props {
 }
 
 export const CostCenterModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialData, costCenters }) => {
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CostCenterFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<any>({
     resolver: zodResolver(costCenterSchema),
     defaultValues: {
       code: '',
@@ -65,7 +65,7 @@ export const CostCenterModal: React.FC<Props> = ({ isOpen, onClose, onSave, init
     }
   }, [initialData, isOpen, reset]);
 
-  const onSubmit = async (data: CostCenterFormData) => {
+  const onSubmit = async (data: any) => {
     try {
       await onSave(data);
       onClose();

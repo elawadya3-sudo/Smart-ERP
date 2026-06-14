@@ -11,6 +11,7 @@ const navItems = [
   { to: '/superadmin', label: 'لوحة التحكم', icon: LayoutDashboard, end: true },
   { to: '/superadmin/tenants', label: 'النسخ المباعة', icon: Building2, end: false },
   { to: '/superadmin/tenants/new', label: 'إضافة نسخة جديدة', icon: Plus, end: false },
+  { to: '/superadmin/modules', label: 'إدارة الموديلات', icon: Settings, end: false },
 ];
 
 export default function SuperAdminLayout() {

@@ -38,6 +38,10 @@ import CashierManagement from './pages/CashierManagement';
 import BranchManagement from './pages/BranchManagement';
 import Login from './pages/Login';
 import { useMainStoreSettings } from './hooks/useMainStoreSettings';
+import AdminPOS from './pages/AdminPOS';
+import AccountsPayable from './pages/inventory/AccountsPayable';
+import ReportsCenter from './pages/reports/ReportsCenter';
+import SystemModules from './pages/superadmin/SystemModules';
 
 // ─── Super Admin Imports ──────────────────────────────────────────────────────
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
@@ -101,6 +105,7 @@ export default function App() {
               <Route path="tenants/new" element={<AddEditTenant />} />
               <Route path="tenants/:id" element={<TenantDetails />} />
               <Route path="tenants/:id/edit" element={<AddEditTenant />} />
+              <Route path="modules" element={<SystemModules />} />
             </Route>
 
             {/* ── Main ERP App Routes ── */}
@@ -125,6 +130,7 @@ export default function App() {
                 <Route path="transfers" element={<StockTransfers />} />
                 <Route path="stock-taking" element={<StockTaking />} />
                 <Route path="reports" element={<InventoryReports />} />
+                <Route path="accounts-payable" element={<AccountsPayable />} />
               </Route>
               <Route path="/accounting">
                 <Route index element={<AccountingDashboard />} />
@@ -138,9 +144,11 @@ export default function App() {
               </Route>
               <Route path="/customers" element={<Customers />} />
               <Route path="/admin/cashiers" element={<CashierManagement />} />
+              <Route path="/admin/pos" element={<AdminPOS />} />
               <Route path="/sales/history" element={<SalesHistory />} />
               <Route path="/cash/reports" element={<CashReports />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/reports/center" element={<ReportsCenter />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>

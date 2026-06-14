@@ -14,7 +14,6 @@ import { AccountDataTable } from './components/AccountDataTable';
 import { AccountModal } from './components/AccountModal';
 import { useAccountingStore } from '../../store/accountingStore';
 import { Account } from '../../types';
-import { getAccountTypeLabel } from '../../lib/utils';
 import { accountingService } from '../../services/accounting';
 
 export default function ChartOfAccountsPage() {

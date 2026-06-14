@@ -77,6 +77,7 @@ export interface Product {
   originNumber?: string;
   weight?: number;
   weightUnit?: 'KG' | 'GRAM';
+  minSellingPrice?: number;
 }
 
 export interface ProductVariant {
@@ -132,6 +133,7 @@ export interface Shift {
   startDate: string;
   endDate?: string;
   notes?: string;
+  cashierName?: string;
 }
 
 export interface Customer {

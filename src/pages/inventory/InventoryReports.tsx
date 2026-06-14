@@ -85,6 +85,7 @@ export default function InventoryReportsPage() {
 
   const totalCostValue = products.reduce((acc, p) => acc + (p.quantity * (p.costPrice || 0)), 0);
   const totalRetailValue = products.reduce((acc, p) => acc + (p.quantity * (p.sellingPrice || 0)), 0);
+  const totalValue = totalCostValue;
   
   const renderReportContent = () => {
     switch (activeReport) {

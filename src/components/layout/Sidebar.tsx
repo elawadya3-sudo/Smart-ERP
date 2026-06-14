@@ -1,3 +1,4 @@
+import React from 'react';
 import { LucideIcon } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -190,9 +191,12 @@ export default function Sidebar({ isOpen = false, setIsOpen }: SidebarProps) {
             {((isModuleAllowed('pos') && (!user.permissions || user.permissions.pos)) ||
               (isModuleAllowed('branchManagement') && (!user.permissions || user.permissions.branchManagement)) ||
               (isModuleAllowed('cashierManagement') && (!user.permissions || user.permissions.cashierManagement))) && (
-              <SidebarGroup label="نقاط البيع" icon={ShoppingCart} activePathPrefix={['/pos', '/branch-management', '/admin/cashiers']}>
+              <SidebarGroup label="نقاط البيع" icon={ShoppingCart} activePathPrefix={['/pos', '/branch-management', '/admin/cashiers', '/admin/pos']}>
                 {isModuleAllowed('pos') && (!user.permissions || user.permissions.pos) && (
-                  <SidebarItem to="/pos" icon={ShoppingCart} label="نقطة البيع" />
+                  <>
+                    <SidebarItem to="/pos" icon={ShoppingCart} label="نقطة البيع" />
+                    <SidebarItem to="/admin/pos" icon={ShoppingCart} label="POS للمدير" />
+                  </>
                 )}
                 {isModuleAllowed('branchManagement') && (!user.permissions || user.permissions.branchManagement) && (
                   <SidebarItem to="/branch-management" icon={LayoutDashboard} label="إدارة الفرع" />
@@ -211,6 +215,7 @@ export default function Sidebar({ isOpen = false, setIsOpen }: SidebarProps) {
                 <SidebarItem to="/inventory/transfers" icon={ArrowRightLeft} label="نقل مخزون" />
                 <SidebarItem to="/inventory/stock-taking" icon={HistoryIcon} label="جرد المخزون" />
                 <SidebarItem to="/inventory/warehouses" icon={Database} label="المستودعات" />
+                <SidebarItem to="/inventory/accounts-payable" icon={Wallet} label="الحسابات الدائنة" />
                 <SidebarItem to="/inventory/reports" icon={BarChart3} label="تقارير المخزون" />
               </SidebarGroup>
             )}
@@ -244,6 +249,7 @@ export default function Sidebar({ isOpen = false, setIsOpen }: SidebarProps) {
                     <SidebarItem to="/sales/history" icon={FileText} label="سجل المبيعات / History" />
                     <SidebarItem to="/cash/reports" icon={Banknote} label="تقارير الكاش والشفتات" />
                     <SidebarItem to="/reports" icon={BarChart3} label="تقارير المبيعات" />
+                    <SidebarItem to="/reports/center" icon={BarChart3} label="مركز التقارير الموحد" />
                   </>
                 )}
                 {isModuleAllowed('settings') && (!user.permissions || user.permissions.settings) && (

@@ -233,7 +233,7 @@ export default function BranchManagement() {
 
     const expense: Order = {
       id: `EXP-${Date.now().toString(36).toUpperCase()}`,
-      items: [{ productId: 'EXPENSE', name: cashExpenseNote || 'صرف نقدي', quantity: 1, price: cashExpenseAmount, total: cashExpenseAmount }],
+      items: [{ productId: 'EXPENSE', name: cashExpenseNote || 'صرف نقدي', quantity: 1, price: cashExpenseAmount, originalPrice: cashExpenseAmount, discount: 0, total: cashExpenseAmount }],
       subtotal: cashExpenseAmount,
       tax: 0,
       discount: 0,
@@ -243,7 +243,8 @@ export default function BranchManagement() {
       shiftId: currentShift.id,
       branchId: selectedBranchId,
       createdAt: new Date().toISOString(),
-      customerId: 'EXPENSE'
+      customerId: 'EXPENSE',
+      status: 'COMPLETED'
     };
     try {
       await addInvoice(expense);
@@ -301,6 +302,30 @@ export default function BranchManagement() {
       setSelectedInvoice({ ...selectedInvoice, items: updatedItems, total: newTotal });
       setEditingItemId(null);
     } catch (err: any) { console.error(err); }
+  };
+
+  const handleReturnInvoice = async (invoiceId: string) => {
+    try {
+      await updateInvoice(invoiceId, { status: 'RETURNED' });
+      alert('تم إرجاع الفاتورة بنجاح وتحديث الرصيد');
+      setSelectedInvoice((prev: any) => prev ? { ...prev, status: 'RETURNED' } : null);
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء إرجاع الفاتورة');
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    const confirmCancel = window.confirm('هل أنت متأكد من رغبتك في حذف/إلغاء هذه الفاتورة؟');
+    if (!confirmCancel) return;
+    try {
+      await deleteInvoice(invoiceId);
+      alert('تم إلغاء/حذف الفاتورة بنجاح');
+      setSelectedInvoice(null);
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء إلغاء الفاتورة');
+    }
   };
 
   if (renderError) {
@@ -1087,7 +1112,7 @@ function ReceivedProductsTable({ transfers, formatCurrency, products }: { transf
     return acc;
   }, {} as Record<string, { name: string, totalQuantity: number, pendingQuantity: number, latestDate: any, history: any[] }>);
 
-  const groupedItems = Object.values(groupedItemsMap)
+  const groupedItems = (Object.values(groupedItemsMap) as any[])
     .sort((a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime())
     .slice(0, 50);
 

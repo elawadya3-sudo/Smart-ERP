@@ -54,7 +54,7 @@ export default function Settings() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting }
-  } = useForm<SettingsFormData>({
+  } = useForm<any>({
     resolver: zodResolver(schema),
     defaultValues: {
       storeName: '',
@@ -88,9 +88,9 @@ export default function Settings() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const onSubmit = async (data: SettingsFormData) => {
+  const onSubmit = async (data: any) => {
     if (!isAdmin) return;
-    const success = await updateSettings(data);
+    const success = await updateSettings(data as any);
     if (success) {
       showToast('تم حفظ البيانات بنجاح', 'success');
     } else {

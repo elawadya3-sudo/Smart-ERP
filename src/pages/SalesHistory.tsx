@@ -17,7 +17,7 @@ import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { Order, Warehouse } from '../types';
 import { useSearchParams } from 'react-router-dom';
 import { INITIAL_WAREHOUSES } from '../constants';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useEffect } from 'react';
 

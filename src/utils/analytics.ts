@@ -19,7 +19,7 @@ import {
   isSameHour,
   isSameMonth
 } from 'date-fns';
-import { Order } from '../types';
+import { Order, Product } from '../types';
 
 export type AnalyticsPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 

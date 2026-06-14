@@ -91,11 +91,12 @@ export default function StockTaking() {
       const selectedWh = warehouses.find(w => w.id === selectedWarehouseId);
       const adjustmentItems = Object.entries(adjustments).map(([pid, actual]) => {
         const prod = products.find(p => p.id === pid);
+        const actualNum = Number(actual);
         return {
           productId: pid,
           productName: prod?.name || 'منتج غير معروف',
-          quantity: actual - (prod?.quantity || 0), // The adjustment delta
-          actualQuantity: actual,
+          quantity: actualNum - (prod?.quantity || 0), // The adjustment delta
+          actualQuantity: actualNum,
           systemQuantity: prod?.quantity || 0
         };
       });
@@ -140,7 +141,7 @@ export default function StockTaking() {
   const stats = useMemo(() => {
     const diffs = Object.entries(adjustments).map(([pid, actual]) => {
       const prod = products.find(p => p.id === pid);
-      return actual - (prod?.quantity || 0);
+      return Number(actual) - (prod?.quantity || 0);
     });
 
     return {

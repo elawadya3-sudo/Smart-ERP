@@ -31,7 +31,7 @@ interface Props {
 }
 
 export const AccountModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialData, accounts, parentAccountIdPreselected }) => {
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<AccountFormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<any>({
     resolver: zodResolver(accountSchema),
     defaultValues: {
       code: '',
@@ -87,7 +87,7 @@ export const AccountModal: React.FC<Props> = ({ isOpen, onClose, onSave, initial
     }
   }, [selectedType, initialData, reset]);
 
-  const onSubmit = async (data: AccountFormData) => {
+  const onSubmit = async (data: any) => {
     try {
       await onSave(data);
       onClose();
