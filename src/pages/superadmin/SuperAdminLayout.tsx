@@ -115,7 +115,7 @@ export default function SuperAdminLayout() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4" style={{ color: '#6366f1' }} />
             <span className="text-xs font-medium" style={{ color: '#6b6b9a' }}>
-              Footprint ERP — Super Admin Control Panel
+              NEZAM PRO — Super Admin Control Panel
             </span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full"

@@ -95,23 +95,51 @@ export const systemService = {
       'customers',
       'journal',
       'journalEntries',
-      'stock_levels'
+      'journal_entries',
+      'journal_vouchers',
+      'stock_levels',
+      'purchase_receipts',
+      'purchase_payments',
+      'accounts_payable',
     ];
 
-    try {
-      for (const coll of collectionsToClear) {
+    const errors: string[] = [];
+    let clearedCount = 0;
+
+    for (const coll of collectionsToClear) {
+      try {
         const snapshot = await getDocs(collection(db, coll));
         for (const d of snapshot.docs) {
-          await deleteDoc(doc(db, coll, d.id));
+          try {
+            await deleteDoc(doc(db, coll, d.id));
+          } catch (innerErr) {
+            // single-doc failure — skip and continue
+            console.warn(`Could not delete ${coll}/${d.id}:`, innerErr);
+          }
         }
+        clearedCount++;
+      } catch (error: any) {
+        // collection-level error (e.g. no rules) — log and continue
+        if (error?.code !== 'permission-denied') {
+          console.warn(`Skipping collection "${coll}":`, error?.message || error);
+        } else {
+          console.warn(`Permission denied for "${coll}" — skipping`);
+        }
+        errors.push(coll);
       }
-      return true;
-    } catch (error) {
-      console.error('Error resetting system data:', error);
-      return false;
     }
+
+    // Consider success if at least core collections were cleared
+    const coreCleared = !errors.includes('orders') && !errors.includes('products');
+    if (coreCleared) {
+      console.log(`Reset complete. Cleared: ${clearedCount}, Skipped: ${errors.length}`);
+      return true;
+    }
+    console.error('Reset failed for core collections:', errors);
+    return false;
   }
 };
+
 
 export const notificationsService = {
   async add(notification: any) {
@@ -136,6 +164,17 @@ export const notificationsService = {
     }
   },
 
+  async delete(id: string) {
+    try {
+      const docRef = doc(db, 'notifications', id);
+      await deleteDoc(docRef);
+      return true;
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      return false;
+    }
+  },
+
   async clearAll() {
     try {
       const snapshot = await getDocs(collection(db, 'notifications'));
@@ -146,6 +185,90 @@ export const notificationsService = {
     } catch (error) {
       console.error('Error clearing notifications:', error);
       return false;
+    }
+  }
+};
+
+export const auditService = {
+  async logActivity(activity: {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    action: string;
+    details: string;
+    referenceId?: string;
+  }) {
+    try {
+      await addDoc(collection(db, 'activity_logs'), {
+        ...activity,
+        timestamp: new Date().toISOString()
+      });
+      return true;
+    } catch (error) {
+      console.error('Error saving activity log:', error);
+      return false;
+    }
+  },
+
+  async getLogsByReference(referenceId: string) {
+    try {
+      const q = query(
+        collection(db, 'activity_logs'),
+        where('referenceId', '==', referenceId)
+      );
+      const snapshot = await getDocs(q);
+      const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort in-memory in case index is not created yet
+      return logs.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } catch (error) {
+      console.error('Error loading activity logs:', error);
+      return [];
+    }
+  }
+};
+
+export const customersService = {
+  async getAll() {
+    const path = 'customers';
+    try {
+      const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Customer[];
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+      return [];
+    }
+  },
+
+  async add(customer: Omit<Customer, 'id' | 'createdAt'>) {
+    const path = 'customers';
+    try {
+      return await addDoc(collection(db, path), {
+        ...customer,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  async update(id: string, customer: Partial<Customer>) {
+    const path = `customers/${id}`;
+    try {
+      const docRef = doc(db, 'customers', id);
+      return await updateDoc(docRef, customer);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  async delete(id: string) {
+    const path = `customers/${id}`;
+    try {
+      const docRef = doc(db, 'customers', id);
+      return await deleteDoc(docRef);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
   }
 };

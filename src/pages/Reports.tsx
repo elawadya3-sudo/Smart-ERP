@@ -23,11 +23,15 @@ import { db } from '../lib/firebase';
 import { Order, Warehouse, User, Product } from '../types';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
+import PageToolbar from '../components/ui/PageToolbar';
+import { useBranchFilter } from '../hooks/useBranchFilter';
 
 export default function Reports() {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const initialView = queryParams.get('view') === 'profit' ? 'profit' : 'sales';
+
+  const restrictedBranchId = useBranchFilter();
 
   const [view, setView] = useState<'sales' | 'profit'>(initialView);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -36,7 +40,8 @@ export default function Reports() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('ALL');
+  // If restricted, lock branch to user's branch; otherwise default ALL
+  const [selectedBranch, setSelectedBranch] = useState(() => restrictedBranchId || 'ALL');
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -186,77 +191,65 @@ export default function Reports() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700" dir="rtl">
-      {/* Premium Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-20"></div>
-        
-        <div className="relative z-10">
-          <button 
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-[0.2em] mb-4 hover:gap-3 transition-all"
-          >
-            <ArrowRight className="w-4 h-4 rotate-180" />
-            لوحة التحكم الرئيسية
-          </button>
-          <div className="flex items-center gap-4 mb-2">
-             <h2 className="text-4xl font-black text-gray-900 tracking-tight">التقارير المالية</h2>
-             <div className="bg-gray-100 p-1 rounded-2xl flex items-center">
-                <button 
-                  onClick={() => setView('sales')}
-                  className={cn("px-6 py-2 rounded-xl text-xs font-black transition-all", view === 'sales' ? "bg-white text-blue-600 shadow-sm" : "text-gray-400")}
-                >
-                  المبيعات
-                </button>
-                <button 
-                  onClick={() => setView('profit')}
-                  className={cn("px-6 py-2 rounded-xl text-xs font-black transition-all", view === 'profit' ? "bg-white text-green-600 shadow-sm" : "text-gray-400")}
-                >
-                  الأرباح
-                </button>
-             </div>
-          </div>
-          <p className="text-gray-500 font-medium italic">
-            {selectedBranch === 'ALL' 
-              ? `عرض شامل لجميع الفروع - ${selectedDate || 'جميع الأوقات'}` 
-              : `تقرير تفصيلي لفرع ${getBranchName(selectedBranch)} - ${selectedDate || 'جميع الأوقات'}`}
-          </p>
-        </div>
-        
-        <div className="flex flex-wrap gap-4 w-full lg:w-auto relative z-10">
-          <div className="relative group flex-1 md:flex-none min-w-[200px]">
-            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input 
-              type="text"
-              placeholder="بحث في الفواتير..."
-              className="w-full bg-gray-50 border border-gray-100 rounded-[1.5rem] pr-10 pl-4 py-4 text-sm font-bold shadow-inner outline-none focus:ring-4 focus:ring-blue-100 transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <div className="relative flex-1 md:flex-none min-w-[180px]">
-            <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select 
-              className="w-full bg-gray-50 border border-gray-100 rounded-[1.5rem] pr-10 pl-8 py-4 text-sm font-bold shadow-inner outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-            >
-              <option value="ALL">جميع الفروع</option>
-              {warehouses.filter(w => (w as any).type !== 'MAIN' && w.id !== '1').map(w => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-700" dir="rtl">
+      <PageToolbar
+        title="التقارير المالية"
+        subtitle={selectedBranch === 'ALL' ? `عرض شامل لجميع الفروع - ${selectedDate || 'جميع الأوقات'}` : `تقرير تفصيلي لفرع ${getBranchName(selectedBranch)} - ${selectedDate || 'جميع الأوقات'}`}
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="بحث في الفواتير أو الأصناف..."
+        onRefresh={() => window.location.reload()}
+        onPrint={() => window.print()}
+        onExportPdf={() => {}}
+        onExportExcel={() => {}}
+      />
 
-          <div className="relative flex-1 md:flex-none min-w-[160px]">
-            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input 
-              type="date"
-              className="w-full bg-gray-50 border border-gray-100 rounded-[1.5rem] pr-10 pl-4 py-4 text-sm font-bold shadow-inner outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
+      <div className="erp-card p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setView('sales')}
+            className={cn(
+              'rounded-xl px-5 py-2.5 text-sm font-bold transition',
+              view === 'sales' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-500'
+            )}
+          >
+            المبيعات
+          </button>
+          <button
+            onClick={() => setView('profit')}
+            className={cn(
+              'rounded-xl px-5 py-2.5 text-sm font-bold transition',
+              view === 'profit' ? 'bg-green-600 text-white' : 'bg-slate-50 text-slate-500'
+            )}
+          >
+            الأرباح
+          </button>
+          <div className="mr-auto flex flex-wrap gap-2">
+            {/* Branch selector — hidden for restricted users */}
+            {!restrictedBranchId && (
+              <div className="relative min-w-[180px]">
+                <Building2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <select
+                  className="erp-input pr-10"
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                >
+                  <option value="ALL">جميع الفروع</option>
+                  {warehouses.filter((w) => (w as any).type !== 'MAIN' && w.id !== '1').map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="relative min-w-[180px]">
+              <Calendar className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="date"
+                className="erp-input pr-10"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -370,16 +363,16 @@ function SalesView({ orders, getBranchName, getCashierName, formatCurrency }: an
         <table className="w-full text-right border-collapse">
           <thead>
             <tr className="bg-gray-100/50">
-              <th className="px-10 py-6 text-xs font-black text-gray-400 uppercase tracking-widest">رقم الفاتورة</th>
-              <th className="px-10 py-6 text-xs font-black text-gray-400 uppercase tracking-widest">الفرع</th>
-              <th className="px-10 py-6 text-xs font-black text-gray-400 uppercase tracking-widest">الكاشير</th>
-              <th className="px-10 py-6 text-xs font-black text-gray-400 uppercase tracking-widest">الأصناف</th>
-              <th className="px-10 py-6 text-xs font-black text-gray-400 uppercase tracking-widest text-left">الإجمالي</th>
+              <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">رقم الفاتورة</th>
+              <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">الفرع</th>
+              <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">الكاشير</th>
+              <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">الأصناف</th>
+              <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest text-left">الإجمالي</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {orders.length === 0 ? (
-              <tr><td colSpan={5} className="px-10 py-20 text-center text-gray-400 font-bold italic">لا توجد مبيعات تطابق البحث</td></tr>
+              <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-bold italic">لا توجد مبيعات تطابق البحث</td></tr>
             ) : (
               orders.map((order: any, idx: number) => (
                 <motion.tr 
@@ -389,22 +382,22 @@ function SalesView({ orders, getBranchName, getCashierName, formatCurrency }: an
                   key={order.id} 
                   className="hover:bg-gray-50/50 transition-colors group"
                 >
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-4">
                     <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">#{order.id.slice(-8).toUpperCase()}</span>
                   </td>
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                        <span className="font-black text-sm text-gray-900">{getBranchName(order.branchId)}</span>
                     </div>
                   </td>
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-gray-500 font-bold text-sm">
                        <Users className="w-4 h-4" />
                        {getCashierName(order.cashierId)}
                     </div>
                   </td>
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-2">
                       {order.items.slice(0, 3).map((item: any, i: number) => (
                         <span key={i} className="bg-gray-100 px-3 py-1 rounded-full text-[10px] font-black text-gray-500">
@@ -414,7 +407,7 @@ function SalesView({ orders, getBranchName, getCashierName, formatCurrency }: an
                       {order.items.length > 3 && <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-full">+{order.items.length - 3} أصناف أخرى</span>}
                     </div>
                   </td>
-                  <td className="px-10 py-6 text-left font-black text-lg text-gray-900">{formatCurrency(order.total)}</td>
+                  <td className="px-6 py-4 text-left font-black text-lg text-gray-900">{formatCurrency(order.total)}</td>
                 </motion.tr>
               ))
             )}
@@ -449,10 +442,10 @@ function ProfitView({ branchStats, productProfit, formatCurrency, selectedBranch
           <table className="w-full text-right border-collapse">
             <thead>
               <tr className="bg-gray-50/50">
-                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">المستودع</th>
-                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">الفواتير</th>
-                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">المبيعات</th>
-                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">صافي الربح</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">المستودع</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">الفواتير</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">المبيعات</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">صافي الربح</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -460,7 +453,7 @@ function ProfitView({ branchStats, productProfit, formatCurrency, selectedBranch
                 const margin = branch.sales > 0 ? (branch.profit / branch.sales) * 100 : 0;
                 return (
                   <tr key={idx} className="hover:bg-gray-50/50 transition-all group">
-                    <td className="px-10 py-8">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shadow-sm", idx === 0 && !isSpecificBranch ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-400")}>
                           {isSpecificBranch ? <Store className="w-5 h-5" /> : idx + 1}
@@ -471,16 +464,16 @@ function ProfitView({ branchStats, productProfit, formatCurrency, selectedBranch
                         </div>
                       </div>
                     </td>
-                    <td className="px-10 py-8 text-center">
+                    <td className="px-6 py-4 text-center">
                        <span className="font-black text-gray-900 bg-gray-100 px-3 py-1 rounded-lg text-sm">{branch.ordersCount}</span>
                     </td>
-                    <td className="px-10 py-8">
+                    <td className="px-6 py-4">
                        <span className="font-black text-gray-700">{formatCurrency(branch.sales)}</span>
                        <div className="w-32 h-1 bg-gray-100 rounded-full mt-2 overflow-hidden">
                           <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (branch.sales / 100000) * 100)}%` }}></div>
                        </div>
                     </td>
-                    <td className="px-10 py-8 text-left">
+                    <td className="px-6 py-4 text-left">
                       <div className="flex flex-col items-end gap-1">
                         <span className={cn(
                           "font-black px-4 py-2 rounded-2xl text-lg",
@@ -495,7 +488,7 @@ function ProfitView({ branchStats, productProfit, formatCurrency, selectedBranch
                 );
               })}
               {displayBranches.length === 0 && (
-                <tr><td colSpan={4} className="px-10 py-20 text-center text-gray-400 font-bold italic">لا توجد بيانات لهذا الفرع في الفترة المحددة</td></tr>
+                <tr><td colSpan={4} className="px-6 py-16 text-center text-gray-400 font-bold italic">لا توجد بيانات لهذا الفرع في الفترة المحددة</td></tr>
               )}
             </tbody>
           </table>

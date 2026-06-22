@@ -30,6 +30,7 @@ import { db } from '../../lib/firebase';
 import { accountingService } from '../../services/accounting';
 import { useAccountingStore } from '../../store/accountingStore';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
+import { accountingIntegration } from '../../services/accountingIntegration';
 
 type TxType = 'RECEIPT' | 'PAYMENT';
 
@@ -105,7 +106,7 @@ function CashModal({
       const acc = accounts.find(a => a.id === form.accountId);
       const ref = form.reference || `${type === 'RECEIPT' ? 'REC' : 'PAY'}-${Date.now()}`;
 
-      await cashTxService.add({
+      const txData = {
         type,
         reference: ref,
         party: form.party,
@@ -114,7 +115,10 @@ function CashModal({
         accountId: form.accountId,
         accountName: acc?.name || '',
         createdAt: new Date().toISOString()
-      });
+      };
+
+      await cashTxService.add(txData);
+      await accountingIntegration.postCashTxToAccounting(txData);
 
       onSave();
       onClose();

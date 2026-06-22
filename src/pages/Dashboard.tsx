@@ -6,8 +6,6 @@ import {
   Package, 
   AlertCircle, 
   Clock, 
-  ChevronLeft,
-  ShoppingCart,
   Loader2,
   Calendar,
   Bell,
@@ -22,10 +20,7 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell
+  ResponsiveContainer
 } from 'recharts';
 import { cn, formatCurrency } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -39,6 +34,13 @@ import {
   AnalyticsPeriod 
 } from '../utils/analytics';
 import { useNavigate } from 'react-router-dom';
+import { 
+  ErpPageLayout, 
+  ErpPageHeader, 
+  ErpStatCard, 
+  ErpCard, 
+  ErpButton 
+} from '../components/ui/ErpUI';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -109,10 +111,8 @@ export default function Dashboard() {
     })
     .reduce((s, o) => s + (o.total || 0), 0);
 
-  // Total purchases derived from cash transactions (PAYMENT)
   const totalPurchases = cashTxs.filter(t => t.type === 'PAYMENT').reduce((s, t) => s + (t.amount || 0), 0);
 
-  // Profit approximation: order items revenue - products cost
   const approxProfit = orders.reduce((acc, o) => {
     const itemsProfit = (o.items || []).reduce((ia, it) => {
       const prod = products.find(p => p.id === it.productId);
@@ -130,7 +130,6 @@ export default function Dashboard() {
     return s + ((t.type === 'RECEIPT') ? (t.amount || 0) : -(t.amount || 0));
   }, 0);
 
-  // recent operations (mix orders and cash txs)
   const recentOps = [
     ...orders.map(o => ({ type: 'order', ts: parseDate(o.createdAt), data: o })),
     ...cashTxs.map(c => ({ type: 'cash', ts: parseDate(c.createdAt), data: c }))
@@ -152,56 +151,47 @@ export default function Dashboard() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <p className="text-gray-500 font-bold animate-pulse">جاري تحميل التحليلات...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900 tracking-tight">لوحة التحكم</h2>
-          <p className="text-gray-500 mt-1">ملخص شامل للمبيعات، المشتريات، المخزون، والإشعارات.</p>
-        </div>
-        <button className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-200 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all w-full sm:w-auto">
-          <Calendar className="w-5 h-5" />
-          تصدير التقرير
-        </button>
+    <ErpPageLayout>
+      <ErpPageHeader
+        title="لوحة التحكم"
+        description="ملخص شامل للمبيعات، المشتريات، المخزون، والإشعارات."
+        breadcrumbs={[{ label: 'الرئيسية' }, { label: 'لوحة التحكم' }]}
+        actions={
+          <ErpButton variant="primary" icon={Calendar}>
+            تصدير التقرير
+          </ErpButton>
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <ErpStatCard title="مبيعات اليوم" value={formatCurrency(salesToday)} icon={BarChart3} trend={salesToday >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} color="blue" />
+        <ErpStatCard title="مبيعات الشهر" value={formatCurrency(salesThisMonth)} icon={Calendar} trend={salesThisMonth >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} color="indigo" />
+        <ErpStatCard title="إجمالي المشتريات" value={formatCurrency(totalPurchases)} icon={CreditCard} trend={totalPurchases >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports')} color="purple" />
+        <ErpStatCard title="الأرباح" value={formatCurrency(approxProfit)} icon={TrendingUp} trend={approxProfit >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=profit')} color="emerald" />
+        <ErpStatCard title="أرصدة الصناديق" value={formatCurrency(cashBalance)} icon={Wallet} trend={cashBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} color="slate" />
+        <ErpStatCard title="أرصدة البنوك" value={formatCurrency(bankBalance)} icon={Banknote} trend={bankBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} color="blue" />
+        <ErpStatCard title="المنتجات منخفضة المخزون" value={`${lowStockCount} منتج`} icon={AlertCircle} trend="down" change=" " onClick={() => navigate('/inventory/reports')} color="red" />
+        <ErpStatCard title="إشعارات النظام" value={`${notifs.length} إشعار`} icon={Bell} trend="up" change=" " onClick={() => navigate('/reports')} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard title="مبيعات اليوم" value={formatCurrency(salesToday)} icon={BarChart3} trend={salesToday >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} />
-        <StatCard title="مبيعات الشهر" value={formatCurrency(salesThisMonth)} icon={Calendar} trend={salesThisMonth >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=sales')} />
-        <StatCard title="إجمالي المشتريات" value={formatCurrency(totalPurchases)} icon={CreditCard} trend={totalPurchases >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports')} />
-        <StatCard title="الأرباح" value={formatCurrency(approxProfit)} icon={TrendingUp} trend={approxProfit >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/reports?view=profit')} />
-        <StatCard title="أرصدة الصناديق" value={formatCurrency(cashBalance)} icon={Wallet} trend={cashBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} />
-        <StatCard title="أرصدة البنوك" value={formatCurrency(bankBalance)} icon={Banknote} trend={bankBalance >= 0 ? 'up' : 'down'} change=" " onClick={() => navigate('/cash/reports')} />
-        <StatCard title="المنتجات منخفضة المخزون" value={`${lowStockCount} منتج`} icon={AlertCircle} trend="down" change=" " onClick={() => navigate('/inventory/reports')} />
-        <StatCard title="إشعارات النظام" value={`${notifs.length} إشعار`} icon={Bell} trend="up" change=" " onClick={() => navigate('/reports')} />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-8">
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
+        <ErpCard>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h4 className="text-xl font-bold text-gray-900">ملخص المبيعات</h4>
-              <p className="text-sm text-gray-500 mt-1">عرض تطور المبيعات حسب الفترة التي تختارها.</p>
+              <h4 className="text-lg font-bold text-slate-900">ملخص المبيعات</h4>
+              <p className="text-sm text-slate-500">عرض تطور المبيعات حسب الفترة التي تختارها.</p>
             </div>
-            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-100">
+            <div className="flex items-center gap-1 rounded-xl bg-slate-50 p-1">
               {periods.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setPeriod(p.id)}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                    'rounded-lg px-3 py-1.5 text-xs font-bold transition',
                     period === p.id
-                      ? "bg-white text-blue-600 shadow-sm"
-                      : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-400 hover:bg-white hover:text-slate-600'
                   )}
                 >
                   {p.label}
@@ -226,17 +216,17 @@ export default function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </ErpCard>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+        <ErpCard className="overflow-hidden p-0 sm:p-0">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
-              <h4 className="text-lg font-bold text-gray-900">إشعارات النظام</h4>
-              <p className="text-sm text-gray-400">آخر التنبيهات والإشعارات المرتبطة بالنظام.</p>
+              <h4 className="text-base font-bold text-slate-900">إشعارات النظام</h4>
+              <p className="text-sm text-slate-500">آخر التنبيهات والإشعارات المرتبطة بالنظام.</p>
             </div>
-            <Bell className="w-5 h-5 text-blue-600" />
+            <Bell className="h-5 w-5 text-blue-600" />
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-slate-100 max-h-[360px] overflow-y-auto scrollbar-thin">
             {notifs.length > 0 ? notifs.map((notif, idx) => (
               <div key={notif.id || idx} className="px-6 py-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center justify-between gap-3">
@@ -249,19 +239,19 @@ export default function Dashboard() {
               <div className="px-6 py-10 text-center text-gray-400">لا توجد إشعارات حالياً</div>
             )}
           </div>
-        </motion.div>
+        </ErpCard>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ErpCard className="overflow-hidden p-0 sm:p-0">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
-              <h4 className="text-lg font-bold text-gray-900">أفضل المنتجات مبيعاً</h4>
-              <p className="text-sm text-gray-400">المنتجات الأعلى مبيعاً خلال الفترة الحالية.</p>
+              <h4 className="text-base font-bold text-slate-900">أفضل المنتجات مبيعاً</h4>
+              <p className="text-sm text-slate-500">المنتجات الأعلى مبيعاً خلال الفترة الحالية.</p>
             </div>
-            <Package className="w-5 h-5 text-gray-400" />
+            <Package className="h-5 w-5 text-slate-400" />
           </div>
-          <div className="space-y-3 p-6">
+          <div className="space-y-3 p-4">
             {topSelling.length > 0 ? topSelling.map((product, idx) => (
               <div key={idx} className="flex items-center justify-between gap-4 p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-colors">
                 <div>
@@ -274,17 +264,17 @@ export default function Dashboard() {
               <div className="text-center py-10 text-gray-400">لا توجد بيانات مبيعات</div>
             )}
           </div>
-        </motion.div>
+        </ErpCard>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+        <ErpCard className="overflow-hidden p-0 sm:p-0">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
-              <h4 className="text-lg font-bold text-gray-900">آخر العمليات</h4>
-              <p className="text-sm text-gray-400">أحدث الفواتير والحركات المالية على النظام.</p>
+              <h4 className="text-base font-bold text-slate-900">آخر العمليات</h4>
+              <p className="text-sm text-slate-500">أحدث الفواتير والحركات المالية على النظام.</p>
             </div>
-            <Clock className="w-5 h-5 text-gray-400" />
+            <Clock className="h-5 w-5 text-slate-400" />
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-slate-100 max-h-[360px] overflow-y-auto scrollbar-thin">
             {recentOps.length > 0 ? recentOps.map((item, idx) => (
               <div key={`${item.type}-${item.data.id || idx}`} className="px-6 py-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center justify-between gap-4">
@@ -300,44 +290,9 @@ export default function Dashboard() {
               <div className="px-6 py-10 text-center text-gray-400">لا توجد عمليات حديثة</div>
             )}
           </div>
-        </motion.div>
+        </ErpCard>
       </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, change, trend, icon: Icon, onClick }: any) {
-  return (
-    <motion.div 
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      className={cn(
-        "bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group transition-all",
-        onClick ? 'cursor-pointer hover:shadow-md' : ''
-      )}
-    >
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">{title}</p>
-          <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
-            <Icon className="w-4 h-4" />
-          </div>
-        </div>
-        <div className="flex items-end justify-between">
-          <h3 className="text-2xl font-black text-gray-900 tracking-tight">{value}</h3>
-          <div className={cn(
-            "flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg",
-            trend === 'up' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
-          )}>
-            {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {change}
-          </div>
-        </div>
-      </div>
-    </motion.div>
+    </ErpPageLayout>
   );
 }
 

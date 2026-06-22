@@ -117,13 +117,13 @@ export const CostCenterModal: React.FC<Props> = ({ isOpen, onClose, onSave, init
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-gray-700">كود المركز <span className="text-red-500">*</span></label>
                       <input {...register('code')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" dir="ltr" placeholder="مثال: 1000" />
-                      {errors.code && <p className="text-xs text-red-500 font-bold">{errors.code.message}</p>}
+                      {errors.code && <p className="text-xs text-red-500 font-bold">{errors.code.message as React.ReactNode}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-gray-700">اسم المركز <span className="text-red-500">*</span></label>
                       <input {...register('name')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="مثال: إدارة المبيعات" />
-                      {errors.name && <p className="text-xs text-red-500 font-bold">{errors.name.message}</p>}
+                      {errors.name && <p className="text-xs text-red-500 font-bold">{errors.name.message as React.ReactNode}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -152,7 +152,7 @@ export const CostCenterModal: React.FC<Props> = ({ isOpen, onClose, onSave, init
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-gray-700">الميزانية المخصصة <span className="text-red-500">*</span></label>
                       <input type="number" step="0.01" {...register('budget')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" dir="ltr" />
-                      {errors.budget && <p className="text-xs text-red-500 font-bold">{errors.budget.message}</p>}
+                      {errors.budget && <p className="text-xs text-red-500 font-bold">{errors.budget.message as React.ReactNode}</p>}
                     </div>
 
                     <div className="space-y-2">

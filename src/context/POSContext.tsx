@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { Shift, Order, AppNotification } from '../types';
 import { collection, query, onSnapshot, setDoc, doc, orderBy, updateDoc, where, getDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType, cleanUndefined } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from '../lib/utils';
 import { notificationsService } from '../services/firestore';
+import { accountingIntegration } from '../services/accountingIntegration';
 
 interface POSContextType {
   shifts: Shift[];
-  openShift: (branchId: string, cashierId: string, openingCash: number) => Promise<Shift>;
+  openShift: (branchId: string, cashierId: string, openingCash: number, cashierName?: string) => Promise<Shift>;
   closeShift: (shiftId: string, actualCash: number, notes?: string) => Promise<void>;
   getOpenShift: (branchId: string) => Shift | undefined;
   invoices: Order[];
@@ -49,7 +50,7 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Query shifts: Admins see all, Cashiers see only theirs
     const shiftsRef = collection(db, 'shifts');
-    const qS = (user.role === 'ADMIN' || user.role === 'admin')
+    const qS = (user.role === 'ADMIN' || (user.role as string) === 'admin')
       ? query(shiftsRef, orderBy('startDate', 'desc'))
       : query(shiftsRef, where('cashierId', '==', user.uid)); 
 
@@ -62,7 +63,7 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Query orders: Admins see all, Cashiers see only theirs
     const ordersRef = collection(db, 'orders');
-    const qI = (user.role === 'ADMIN' || user.role === 'admin')
+    const qI = (user.role === 'ADMIN' || (user.role as string) === 'admin')
       ? query(ordersRef, orderBy('createdAt', 'desc'))
       : query(ordersRef, where('cashierId', '==', user.uid)); 
 
@@ -164,9 +165,9 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error('Shift not found anywhere.');
       }
 
-      const shiftInvoices = (invoices || []).filter(inv => inv && inv.shiftId === shiftId && (inv.status === 'COMPLETED' || !inv.status));
+      const shiftInvoices = (invoices || []).filter(inv => inv && inv.shiftId === shiftId && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status));
       const cashSales = shiftInvoices.filter(inv => inv.paymentMethod === 'cash').reduce((acc, inv) => acc + (inv.total || 0), 0);
-      const cardSales = shiftInvoices.filter(inv => inv.paymentMethod === 'visa').reduce((acc, inv) => acc + (inv.total || 0), 0);
+      const cardSales = shiftInvoices.filter(inv => inv.paymentMethod === 'visa' || inv.paymentMethod === 'vodafone' || inv.paymentMethod === 'instapay').reduce((acc, inv) => acc + (inv.total || 0), 0);
 
       const updateData = {
         status: 'CLOSED' as const,
@@ -204,14 +205,13 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error('Missing cashierId for invoice creation.');
       }
 
-      Object.keys(invoiceData).forEach(key => {
-        if (invoiceData[key] === undefined) {
-          delete invoiceData[key];
-        }
-      });
-
-      await setDoc(doc(db, 'orders', invoice.id), invoiceData);
+      const cleanedData = cleanUndefined(invoiceData);
+      await setDoc(doc(db, 'orders', invoice.id), cleanedData);
       
+      if (invoiceData.status === 'COMPLETED') {
+        await accountingIntegration.postInvoiceToAccounting(invoiceData);
+      }
+
       // Add Notification
       notificationsService.add({
         title: invoice.status === 'PENDING' ? 'فاتورة معلقة' : 'فاتورة بيع جديدة',
@@ -228,18 +228,21 @@ export const POSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateInvoice = async (invoiceId: string, updates: Partial<Order>) => {
     try {
-      const updateData = { ...updates } as any;
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          delete updateData[key];
-        }
-      });
+      const updateData = cleanUndefined(updates);
 
       if (Object.keys(updateData).length === 0) {
         return;
       }
 
       await updateDoc(doc(db, 'orders', invoiceId), updateData);
+
+      if (updateData.status === 'COMPLETED') {
+        const docSnap = await getDoc(doc(db, 'orders', invoiceId));
+        if (docSnap.exists()) {
+          const fullInvoice = { id: docSnap.id, ...docSnap.data() } as Order;
+          await accountingIntegration.postInvoiceToAccounting(fullInvoice);
+        }
+      }
       
       // Add Notification
       const isReturn = updateData.status === 'RETURNED';

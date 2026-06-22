@@ -20,6 +20,7 @@ import { usePOS } from '../context/POSContext';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useEffect } from 'react';
+import PageToolbar from '../components/ui/PageToolbar';
 
 export default function CashReports() {
   const { shifts } = usePOS();
@@ -52,49 +53,43 @@ export default function CashReports() {
   };
 
   return (
-    <div className="space-y-8" dir="rtl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight">تقارير الكاش والشفتات</h2>
-          <p className="text-gray-500 mt-2 font-medium">متابعة الأداء المالي لكل فرع وحركة الورديات</p>
-        </div>
-        
-        <div className="flex flex-wrap gap-4">
-           <div className="relative group">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder="رقم الوردية..."
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-4 py-3 text-sm font-bold shadow-sm outline-none focus:ring-4 focus:ring-blue-100 transition-all w-64"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-           </div>
-           
-           <div className="relative">
-              <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <select 
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-8 py-3 text-sm font-bold shadow-sm appearance-none cursor-pointer outline-none focus:ring-4 focus:ring-blue-100"
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-              >
-                <option value="ALL">جميع الفروع</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-           </div>
+    <div className="space-y-6" dir="rtl">
+      <PageToolbar
+        title="تقارير الكاش والشفتات"
+        subtitle="متابعة الأداء المالي لكل فرع وحركة الورديات"
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="رقم الوردية..."
+        onRefresh={() => window.location.reload()}
+        onPrint={() => window.print()}
+        onExportPdf={() => {}}
+        onExportExcel={() => {}}
+      />
 
-           <div className="relative">
-              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="date"
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-4 py-3 text-sm font-bold shadow-sm outline-none focus:ring-4 focus:ring-blue-100"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
-           </div>
+      <div className="erp-card p-4">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative min-w-[180px]">
+            <Building2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <select
+              className="erp-input pr-10"
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+            >
+              <option value="ALL">جميع الفروع</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative min-w-[180px]">
+            <Calendar className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="date"
+              className="erp-input pr-10"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -241,7 +236,7 @@ export default function CashReports() {
                initial={{ scale: 0.95, opacity: 0, y: 20 }}
                animate={{ scale: 1, opacity: 1, y: 0 }}
                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-               className="relative w-full max-w-2xl bg-white rounded-[3rem] p-12 shadow-2xl overflow-hidden"
+               className="erp-modal max-w-2xl"
             >
                 <div className="flex justify-between items-start mb-10">
                    <div>

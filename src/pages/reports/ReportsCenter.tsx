@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   BarChart3, FileText, Banknote, Package, Calendar, Building2,
   Search, Download, CreditCard, Eye, ArrowRight, Loader2,
-  TrendingUp, ShoppingCart, Coins, Users, X, RefreshCw
+  TrendingUp, ShoppingCart, Coins, Users, X, RefreshCw, Smartphone, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
@@ -291,8 +291,19 @@ function SalesHistoryTab({ orders, warehouses, getBranchName }: any) {
                   <td className="px-6 py-4 font-bold text-gray-700 text-sm">{getBranchName(order.branchId)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1 text-sm font-bold text-gray-500">
-                      {order.paymentMethod === 'visa' ? <CreditCard className="w-4 h-4 text-blue-400" /> : <Banknote className="w-4 h-4 text-green-500" />}
-                      {order.paymentMethod === 'visa' ? 'فيزا' : 'نقدي'}
+                      {order.paymentMethod === 'visa' ? (
+                        <CreditCard className="w-4 h-4 text-blue-400" />
+                      ) : order.paymentMethod === 'vodafone' ? (
+                        <Smartphone className="w-4 h-4 text-purple-400" />
+                      ) : order.paymentMethod === 'instapay' ? (
+                        <QrCode className="w-4 h-4 text-pink-400" />
+                      ) : (
+                        <Banknote className="w-4 h-4 text-green-500" />
+                      )}
+                      {order.paymentMethod === 'visa' ? 'فيزا' : 
+                       order.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
+                       order.paymentMethod === 'instapay' ? 'انستا باي' : 
+                       order.paymentMethod === 'debt' ? 'آجل' : 'نقدي'}
                     </div>
                   </td>
                   <td className="px-6 py-4">

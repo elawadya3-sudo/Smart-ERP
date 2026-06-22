@@ -20,6 +20,17 @@ import GoodsReceipt from './pages/inventory/GoodsReceipt';
 import InventoryReports from './pages/inventory/InventoryReports';
 import StockTransfers from './pages/inventory/Transfers';
 import StockTaking from './pages/inventory/StockTaking';
+import ItemMap from './pages/inventory/ItemMap';
+import ProductUnits from './pages/inventory/ProductUnits';
+import BulkProductEdit from './pages/inventory/BulkProductEdit';
+import SalesReturns from './pages/inventory/SalesReturns';
+import PurchaseReturns from './pages/inventory/PurchaseReturns';
+import StockIssue from './pages/inventory/StockIssue';
+import BranchTransferRequest from './pages/inventory/BranchTransferRequest';
+import OpeningBalance from './pages/inventory/OpeningBalance';
+import ProductLedger from './pages/inventory/ProductLedger';
+import TransferReceipt from './pages/inventory/TransferReceipt';
+import InventoryApproval from './pages/inventory/InventoryApproval';
 import AddProduct from './pages/products/AddProduct';
 import AccountingDashboard from './pages/accounting/AccountingDashboard';
 import ChartOfAccounts from './pages/accounting/ChartOfAccounts';
@@ -42,6 +53,7 @@ import AdminPOS from './pages/AdminPOS';
 import AccountsPayable from './pages/inventory/AccountsPayable';
 import ReportsCenter from './pages/reports/ReportsCenter';
 import SystemModules from './pages/superadmin/SystemModules';
+import PosCustomers from './pages/pos/PosCustomers';
 
 // ─── Super Admin Imports ──────────────────────────────────────────────────────
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
@@ -83,7 +95,7 @@ export default function App() {
     if (settings?.storeName) {
       document.title = settings.storeName;
     } else {
-      document.title = 'Footprint ERP & POS';
+      document.title = 'NEZAM PRO';
     }
   }, [settings]);
 
@@ -118,6 +130,7 @@ export default function App() {
             }>
               <Route path="/" element={<Dashboard />} />
               <Route path="/pos" element={<POS />} />
+              <Route path="/pos/customers" element={<PosCustomers />} />
               <Route path="/branch-management" element={<BranchManagement />} />
               <Route path="/inventory">
                 <Route index element={<InventoryDashboard />} />
@@ -126,9 +139,20 @@ export default function App() {
                 <Route path="products" element={<Products />} />
                 <Route path="products/add" element={<AddProduct />} />
                 <Route path="products/edit/:id" element={<AddProduct />} />
+                <Route path="item-map" element={<ItemMap />} />
+                <Route path="product-ledger" element={<ProductLedger />} />
+                <Route path="product-units" element={<ProductUnits />} />
+                <Route path="bulk-product-edit" element={<BulkProductEdit />} />
                 <Route path="receipt" element={<GoodsReceipt />} />
+                <Route path="sales-returns" element={<SalesReturns />} />
+                <Route path="transfer-receipt" element={<TransferReceipt />} />
+                <Route path="purchase-returns" element={<PurchaseReturns />} />
+                <Route path="stock-issue" element={<StockIssue />} />
+                <Route path="branch-transfer-request" element={<BranchTransferRequest />} />
                 <Route path="transfers" element={<StockTransfers />} />
+                <Route path="opening-balance" element={<OpeningBalance />} />
                 <Route path="stock-taking" element={<StockTaking />} />
+                <Route path="approval" element={<InventoryApproval />} />
                 <Route path="reports" element={<InventoryReports />} />
                 <Route path="accounts-payable" element={<AccountsPayable />} />
               </Route>

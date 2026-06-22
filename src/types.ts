@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'CASHIER';
+export type UserRole = 'ADMIN' | 'BRANCH_MANAGER' | 'WAREHOUSE_MANAGER' | 'CASHIER' | 'SALES' | 'PURCHASES' | 'HR' | 'ACCOUNTANT';
 
 // ─── Super Admin / Multi-Tenant Types ────────────────────────────────────────
 export type TenantStatus = 'active' | 'suspended' | 'expired' | 'trial';
@@ -33,6 +33,7 @@ export interface TenantStats {
 export interface UserPermissions {
   dashboard: boolean;
   pos: boolean;
+  adminPos?: boolean;
   inventory: boolean;
   accounting: boolean;
   customers: boolean;
@@ -41,6 +42,37 @@ export interface UserPermissions {
   branchManagement: boolean;
   cashierManagement: boolean;
   systemReset: boolean;
+  pos_make_return?: boolean;
+  pos_delete_invoice?: boolean;
+  // Granular inventory sub-pages
+  inventory_products?: boolean;
+  inventory_units?: boolean;
+  inventory_itemmap?: boolean;
+  inventory_warehouses?: boolean;
+  inventory_receipt?: boolean;
+  inventory_salesreturns?: boolean;
+  inventory_purchasereturns?: boolean;
+  inventory_issue?: boolean;
+  inventory_branchtransfer?: boolean;
+  inventory_transfers?: boolean;
+  inventory_transfer_receipt?: boolean;
+  inventory_opening?: boolean;
+  inventory_stocktaking?: boolean;
+  inventory_approval?: boolean;
+  inventory_payable?: boolean;
+  inventory_reports?: boolean;
+  // Granular accounting sub-pages
+  accounting_chart?: boolean;
+  accounting_costcenters?: boolean;
+  accounting_currencies?: boolean;
+  accounting_checkstages?: boolean;
+  accounting_taxes?: boolean;
+  accounting_journal?: boolean;
+  accounting_cash?: boolean;
+  // Granular reports/system sub-pages
+  reports_cash?: boolean;
+  reports_history?: boolean;
+  reports_center?: boolean;
 }
 
 export interface User {
@@ -60,7 +92,7 @@ export interface Product {
   name: string;
   brand: string;
   category: string;
-  sizes: number[];
+  sizes: (string | number)[];
   colors: string[];
   images: string[];
   barcode: string;
@@ -78,21 +110,29 @@ export interface Product {
   weight?: number;
   weightUnit?: 'KG' | 'GRAM';
   minSellingPrice?: number;
+  minQuantity?: number;
+  productType?: 'simple' | 'variant';
+  trackInventory?: boolean;
+  warehouseId?: string;
 }
 
 export interface ProductVariant {
-  size: number;
+  size: string | number;
   color: string;
   quantity: number;
   sku?: string;
+  price?: number;
+  barcode?: string;
 }
 
 export interface OrderItem {
   productId: string;
   name: string;
+  sku?: string;
   variant?: {
-    size: number;
+    size: string | number;
     color: string;
+    sku?: string;
   };
   quantity: number;
   price: number; // Final unit price after discount
@@ -100,6 +140,7 @@ export interface OrderItem {
   discount: number; // Discount per unit
   minSellingPrice?: number; // Minimum allowed price per unit
   total: number;
+  returnedQuantity?: number;
 }
 
 export interface Order {
@@ -109,13 +150,13 @@ export interface Order {
   tax: number;
   discount: number; // Overall invoice discount
   total: number;
-  paymentMethod: 'cash' | 'visa';
+  paymentMethod: 'cash' | 'visa' | 'debt' | 'vodafone' | 'instapay';
   customerId?: string;
   branchId: string;
   cashierId: string;
   shiftId: string;
   createdAt: string;
-  status: 'COMPLETED' | 'RETURNED' | 'PENDING' | 'CANCELLED';
+  status: 'COMPLETED' | 'RETURNED' | 'PARTIALLY_RETURNED' | 'PENDING' | 'CANCELLED';
   notes?: string;
 }
 
@@ -143,7 +184,10 @@ export interface Customer {
   email?: string;
   points: number;
   balance: number;
+  balanceType?: 'credit' | 'debit';
+  address?: string;
   createdAt: string;
+  branchId?: string;
 }
 
 export interface Warehouse {
@@ -153,10 +197,12 @@ export interface Warehouse {
   location?: string;
   manager?: string;
   isActive: boolean;
+  type?: string;
+  status?: string;
 }
 
 export type TransactionType = 'RECEIPT' | 'TRANSFER' | 'ISSUE' | 'RETURN' | 'ADJUSTMENT';
-export type TransactionStatus = 'DRAFT' | 'PENDING' | 'COMPLETED' | 'CANCELLED';
+export type TransactionStatus = 'DRAFT' | 'PENDING' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED';
 
 export interface InventoryTransaction {
   id: string;
@@ -170,6 +216,10 @@ export interface InventoryTransaction {
     quantity: number;
     cost?: number;
     sku?: string;
+    variant?: {
+      size: string | number;
+      color: string;
+    };
   }[];
   reference?: string;
   notes?: string;
@@ -259,4 +309,164 @@ export interface AppNotification {
   createdAt: any;
   userId?: string;
   metadata?: any;
+}
+
+export interface StockTakingItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  brand: string;
+  unit: string;
+  bookQty: number;
+  actualQty: number;
+  diffQty: number;
+  unitCost: number;
+  diffValue: number;
+  notes: string;
+}
+
+export interface StockTakingDoc {
+  id: string;
+  warehouseId: string;
+  warehouseName: string;
+  status: 'DRAFT' | 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  notes?: string;
+  items: StockTakingItem[];
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  history?: {
+    status: string;
+    updatedAt: string;
+    updatedBy: string;
+    updatedByName: string;
+    notes?: string;
+  }[];
+}
+
+export interface OpeningBalanceItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  brand: string;
+  unit: string;
+  quantity: number;
+  unitCost: number;
+  totalValue: number;
+  location?: string;
+  notes?: string;
+}
+
+export interface OpeningBalanceCustomer {
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  debit: number;
+  credit: number;
+  notes?: string;
+}
+
+export interface OpeningBalanceSupplier {
+  supplierId: string;
+  supplierName: string;
+  supplierPhone?: string;
+  debit: number;
+  credit: number;
+  notes?: string;
+}
+
+export interface OpeningBalanceAccount {
+  accountId: string;
+  accountName: string;
+  accountCode: string;
+  debit: number;
+  credit: number;
+  notes?: string;
+}
+
+export interface OpeningBalanceDoc {
+  id: string;
+  docNumber: string;
+  date: string;
+  branchId?: string;
+  branchName?: string;
+  warehouseId?: string; // only for ITEMS type
+  warehouseName?: string; // only for ITEMS type
+  type: 'ITEMS' | 'CUSTOMERS' | 'SUPPLIERS' | 'ACCOUNTS';
+  status: 'DRAFT' | 'COMPLETED' | 'CANCELLED';
+  notes?: string;
+  totalAmount: number;
+  items?: OpeningBalanceItem[];
+  customers?: OpeningBalanceCustomer[];
+  suppliers?: OpeningBalanceSupplier[];
+  accounts?: OpeningBalanceAccount[];
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+}
+
+export interface TransferReceiptItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  unit: string;
+  transferredQty: number;
+  receivedQty: number;
+  difference: number;
+  itemStatus: 'MATCH' | 'DEFICIT' | 'SURPLUS';
+  notes?: string;
+}
+
+export interface TransferReceiptDoc {
+  id: string;
+  receiptNumber: string;
+  date: string;
+  transferId: string;
+  transferNumber: string;
+  fromWarehouseId: string;
+  fromWarehouseName: string;
+  toWarehouseId: string;
+  toWarehouseName: string;
+  receiverName: string;
+  status: 'DRAFT' | 'REVIEW' | 'RECEIVED' | 'PARTIALLY_RECEIVED' | 'REJECTED' | 'CANCELLED';
+  notes?: string;
+  items: TransferReceiptItem[];
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
 }

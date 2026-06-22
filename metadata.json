@@ -1,5 +1,5 @@
 {
-  "name": "Footprint ERP & POS",
+  "name": "NEZAM PRO",
   "description": "A modern Arabic RTL cloud ERP and POS system for footwear retail, featuring inventory management, sales analytics, and a fast cashier interface.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

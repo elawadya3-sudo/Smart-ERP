@@ -10,7 +10,8 @@ import {
   orderBy,
   serverTimestamp,
   runTransaction,
-  increment
+  increment,
+  setDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Warehouse, InventoryTransaction, Product } from '../types';
@@ -55,13 +56,13 @@ export const inventoryTransactionService = {
   },
 
   /**
-   * Complex operation: Creates a transaction AND updates product stock levels atomically
+   * Creates a transaction and updates stock only when status is COMPLETED.
    */
   async createStockMovement(transaction: Omit<InventoryTransaction, 'id' | 'createdAt'>) {
     try {
       console.log("Starting stock movement transaction:", transaction);
       
-      await runTransaction(db, async (firestoreTransaction) => {
+      const txId = await runTransaction(db, async (firestoreTransaction) => {
         // 1. COLLECT ALL READS FIRST
         const productData: { ref: any, snap: any, item: any }[] = [];
         
@@ -78,33 +79,141 @@ export const inventoryTransactionService = {
         }
 
         // 2. PERFORM ALL WRITES AFTER READS
-        // Create the activity record
         const txRef = doc(collection(db, 'inventory_transactions'));
         firestoreTransaction.set(txRef, {
           ...transaction,
           createdAt: new Date().toISOString()
         });
 
-        // Update each product
-        for (const entry of productData) {
-          let qtyDelta = Number(entry.item.quantity) || 0;
+        if (transaction.status === 'COMPLETED') {
+          for (const entry of productData) {
+            let qtyDelta = Number(entry.item.quantity) || 0;
 
+            if (transaction.type === 'RECEIPT' || transaction.type === 'RETURN') {
+              // Addition
+            } else if (transaction.type === 'ISSUE' || transaction.type === 'TRANSFER') {
+              qtyDelta = -qtyDelta;
+            }
+
+            const productDocData = entry.snap.data() as any;
+            let variantsUpdate = {};
+            if (productDocData.variants && productDocData.variants.length > 0) {
+              const updatedVariants = productDocData.variants.map((v: any) => {
+                const isSkuMatch = entry.item.sku && v.sku && v.sku === entry.item.sku;
+                const isVariantMatch = entry.item.variant && 
+                  String(v.size) === String(entry.item.variant.size) && 
+                  String(v.color) === String(entry.item.variant.color);
+                const generatedSku = `${productDocData.sku || 'PROD'}-${v.size}-${v.color}`;
+                const isGeneratedSkuMatch = entry.item.sku === generatedSku;
+
+                if (isSkuMatch || isVariantMatch || isGeneratedSkuMatch) {
+                  return { ...v, quantity: (v.quantity || 0) + qtyDelta };
+                }
+                return v;
+              });
+              variantsUpdate = { variants: updatedVariants };
+            }
+
+            firestoreTransaction.update(entry.ref, {
+              quantity: increment(qtyDelta),
+              ...variantsUpdate,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+        return txRef.id;
+      });
+      return { success: true, id: txId };
+    } catch (error: any) {
+      console.error("Stock movement failed details:", error);
+      throw new Error(error.message || "حدث خطأ غير متوقع أثناء تحديث المخزون");
+    }
+  },
+
+  async createPendingTransferRequest(transaction: Omit<InventoryTransaction, 'id' | 'createdAt'>) {
+    try {
+      const txRef = doc(collection(db, 'inventory_transactions'));
+      await setDoc(txRef, {
+        ...transaction,
+        createdAt: new Date().toISOString()
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Pending transfer request failed:', error);
+      throw new Error(error.message || 'فشل إنشاء طلب تحويل المخزون');
+    }
+  },
+
+  async approveStockMovement(transaction: InventoryTransaction) {
+    try {
+      const txRef = doc(db, 'inventory_transactions', transaction.id);
+      await runTransaction(db, async (firestoreTransaction) => {
+        const txSnap = await firestoreTransaction.get(txRef);
+        if (!txSnap.exists()) {
+          throw new Error('المعاملة غير موجودة');
+        }
+        const txData = txSnap.data() as InventoryTransaction;
+        if (txData.status !== 'PENDING') {
+          throw new Error('المعاملة ليست بإنتظار الموافقة');
+        }
+
+        const productMap = new Map<string, { ref: any, snap: any }>();
+        for (const item of transaction.items) {
+          if (!item.productId) continue;
+          const productRef = doc(db, 'products', item.productId);
+          const snap = await firestoreTransaction.get(productRef);
+          if (!snap.exists()) {
+            throw new Error(`المنتج ${item.productName || item.productId} غير موجود`);
+          }
+          productMap.set(item.productId, { ref: productRef, snap });
+        }
+
+        for (const item of transaction.items) {
+          const entry = productMap.get(item.productId);
+          if (!entry) continue;
+
+          let qtyDelta = Number(item.quantity) || 0;
           if (transaction.type === 'RECEIPT' || transaction.type === 'RETURN') {
             // Addition
           } else if (transaction.type === 'ISSUE' || transaction.type === 'TRANSFER') {
             qtyDelta = -qtyDelta;
           }
 
+          const productDocData = entry.snap.data() as any;
+          let variantsUpdate = {};
+          if (productDocData.variants && productDocData.variants.length > 0) {
+            const updatedVariants = productDocData.variants.map((v: any) => {
+              const isSkuMatch = item.sku && v.sku && v.sku === item.sku;
+              const isVariantMatch = item.variant && 
+                String(v.size) === String(item.variant.size) && 
+                String(v.color) === String(item.variant.color);
+              const generatedSku = `${productDocData.sku || 'PROD'}-${v.size}-${v.color}`;
+              const isGeneratedSkuMatch = item.sku === generatedSku;
+
+              if (isSkuMatch || isVariantMatch || isGeneratedSkuMatch) {
+                return { ...v, quantity: (v.quantity || 0) + qtyDelta };
+              }
+              return v;
+            });
+            variantsUpdate = { variants: updatedVariants };
+          }
+
           firestoreTransaction.update(entry.ref, {
             quantity: increment(qtyDelta),
+            ...variantsUpdate,
             updatedAt: new Date().toISOString()
           });
         }
+
+        firestoreTransaction.update(txRef, {
+          status: 'COMPLETED',
+          updatedAt: new Date().toISOString()
+        });
       });
       return true;
     } catch (error: any) {
-      console.error("Stock movement failed details:", error);
-      throw new Error(error.message || "حدث خطأ غير متوقع أثناء تحديث المخزون");
+      console.error('Approve stock movement failed:', error);
+      throw new Error(error.message || 'فشل اعتماد المعاملة');
     }
   },
 
@@ -134,36 +243,82 @@ export const inventoryTransactionService = {
 
         // 2. PERFORM ALL WRITES
         
-        // Reversing old transaction effects
-        for (const item of oldTransaction.items) {
-          const entry = productMap.get(item.productId);
-          if (entry?.snap.exists()) {
-            let reverseQty = Number(item.quantity) || 0;
-            if (oldTransaction.type === 'RECEIPT' || oldTransaction.type === 'RETURN') {
-              reverseQty = -reverseQty;
+        // Reversing old transaction effects (only if it was COMPLETED)
+        if (oldTransaction.status === 'COMPLETED') {
+          for (const item of oldTransaction.items) {
+            const entry = productMap.get(item.productId);
+            if (entry?.snap.exists()) {
+              let reverseQty = Number(item.quantity) || 0;
+              if (oldTransaction.type === 'RECEIPT' || oldTransaction.type === 'RETURN') {
+                reverseQty = -reverseQty;
+              }
+
+              const productDocData = entry.snap.data() as any;
+              let variantsUpdate = {};
+              if (productDocData.variants && productDocData.variants.length > 0) {
+                const updatedVariants = productDocData.variants.map((v: any) => {
+                  const isSkuMatch = item.sku && v.sku && v.sku === item.sku;
+                  const isVariantMatch = item.variant && 
+                    String(v.size) === String(item.variant.size) && 
+                    String(v.color) === String(item.variant.color);
+                  const generatedSku = `${productDocData.sku || 'PROD'}-${v.size}-${v.color}`;
+                  const isGeneratedSkuMatch = item.sku === generatedSku;
+
+                  if (isSkuMatch || isVariantMatch || isGeneratedSkuMatch) {
+                    return { ...v, quantity: (v.quantity || 0) + reverseQty };
+                  }
+                  return v;
+                });
+                variantsUpdate = { variants: updatedVariants };
+              }
+
+              firestoreTransaction.update(entry.ref, {
+                quantity: increment(reverseQty),
+                ...variantsUpdate
+              });
             }
-            firestoreTransaction.update(entry.ref, {
-              quantity: increment(reverseQty)
-            });
           }
         }
 
-        // Applying new transaction effects
-        for (const item of newTransaction.items) {
-          const entry = productMap.get(item.productId);
-          if (!entry?.snap.exists()) {
-            throw new Error(`المنتج ${item.productName || item.productId} غير موجود`);
+        // Applying new transaction effects (only if it is COMPLETED)
+        if (newTransaction.status === 'COMPLETED') {
+          for (const item of newTransaction.items) {
+            const entry = productMap.get(item.productId);
+            if (!entry?.snap.exists()) {
+              throw new Error(`المنتج ${item.productName || item.productId} غير موجود`);
+            }
+            let qtyDelta = Number(item.quantity) || 0;
+            if (newTransaction.type === 'RECEIPT' || newTransaction.type === 'RETURN') {
+              // Addition
+            } else if (newTransaction.type === 'ISSUE' || newTransaction.type === 'TRANSFER') {
+              qtyDelta = -qtyDelta;
+            }
+
+            const productDocData = entry.snap.data() as any;
+            let variantsUpdate = {};
+            if (productDocData.variants && productDocData.variants.length > 0) {
+              const updatedVariants = productDocData.variants.map((v: any) => {
+                const isSkuMatch = item.sku && v.sku && v.sku === item.sku;
+                const isVariantMatch = item.variant && 
+                  String(v.size) === String(item.variant.size) && 
+                  String(v.color) === String(item.variant.color);
+                const generatedSku = `${productDocData.sku || 'PROD'}-${v.size}-${v.color}`;
+                const isGeneratedSkuMatch = item.sku === generatedSku;
+
+                if (isSkuMatch || isVariantMatch || isGeneratedSkuMatch) {
+                  return { ...v, quantity: (v.quantity || 0) + qtyDelta };
+                }
+                return v;
+              });
+              variantsUpdate = { variants: updatedVariants };
+            }
+
+            firestoreTransaction.update(entry.ref, {
+              quantity: increment(qtyDelta),
+              ...variantsUpdate,
+              updatedAt: new Date().toISOString()
+            });
           }
-          let qtyDelta = Number(item.quantity) || 0;
-          if (newTransaction.type === 'RECEIPT' || newTransaction.type === 'RETURN') {
-            // Addition
-          } else if (newTransaction.type === 'ISSUE' || newTransaction.type === 'TRANSFER') {
-            qtyDelta = -qtyDelta;
-          }
-          firestoreTransaction.update(entry.ref, {
-            quantity: increment(qtyDelta),
-            updatedAt: new Date().toISOString()
-          });
         }
 
         // Update transaction record
@@ -195,19 +350,42 @@ export const inventoryTransactionService = {
         }
 
         // 2. PERFORM ALL WRITES
-        // Reverse transaction effects
-        for (const item of transaction.items) {
-          if (!item.productId) continue;
-          const entry = productMap.get(item.productId);
-          if (entry?.snap.exists()) {
-            let reverseQty = Number(item.quantity) || 0;
-            if (transaction.type === 'RECEIPT' || transaction.type === 'RETURN') {
-              reverseQty = -reverseQty;
+        // Reverse transaction effects (only if it was COMPLETED)
+        if (transaction.status === 'COMPLETED') {
+          for (const item of transaction.items) {
+            if (!item.productId) continue;
+            const entry = productMap.get(item.productId);
+            if (entry?.snap.exists()) {
+              let reverseQty = Number(item.quantity) || 0;
+              if (transaction.type === 'RECEIPT' || transaction.type === 'RETURN') {
+                reverseQty = -reverseQty;
+              }
+
+              const productDocData = entry.snap.data() as any;
+              let variantsUpdate = {};
+              if (productDocData.variants && productDocData.variants.length > 0) {
+                const updatedVariants = productDocData.variants.map((v: any) => {
+                  const isSkuMatch = item.sku && v.sku && v.sku === item.sku;
+                  const isVariantMatch = item.variant && 
+                    String(v.size) === String(item.variant.size) && 
+                    String(v.color) === String(item.variant.color);
+                  const generatedSku = `${productDocData.sku || 'PROD'}-${v.size}-${v.color}`;
+                  const isGeneratedSkuMatch = item.sku === generatedSku;
+
+                  if (isSkuMatch || isVariantMatch || isGeneratedSkuMatch) {
+                    return { ...v, quantity: (v.quantity || 0) + reverseQty };
+                  }
+                  return v;
+                });
+                variantsUpdate = { variants: updatedVariants };
+              }
+
+              firestoreTransaction.update(entry.ref, {
+                quantity: increment(reverseQty),
+                ...variantsUpdate,
+                updatedAt: new Date().toISOString()
+              });
             }
-            firestoreTransaction.update(entry.ref, {
-              quantity: increment(reverseQty),
-              updatedAt: new Date().toISOString()
-            });
           }
         }
 

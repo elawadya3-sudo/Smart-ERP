@@ -37,13 +37,118 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
             if (userDoc.exists()) {
               const data = userDoc.data() as User;
-              let role = data.role.toUpperCase();
+              let role = data.role?.toUpperCase() || 'CASHIER';
               if (role === 'EMPLOYEE') role = 'CASHIER';
               if (role === 'ADMIN') role = 'ADMIN';
-              
+
+              const roleDefaultPermissions: Record<string, any> = {
+                ADMIN: {
+                  dashboard: true,
+                  pos: true,
+                  inventory: true,
+                  accounting: true,
+                  customers: true,
+                  reports: true,
+                  settings: true,
+                  branchManagement: true,
+                  cashierManagement: true,
+                  systemReset: true,
+                },
+                BRANCH_MANAGER: {
+                  dashboard: true,
+                  pos: true,
+                  inventory: false,
+                  accounting: false,
+                  customers: true,
+                  reports: true,
+                  settings: false,
+                  branchManagement: true,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+                WAREHOUSE_MANAGER: {
+                  dashboard: true,
+                  pos: false,
+                  inventory: true,
+                  accounting: false,
+                  customers: false,
+                  reports: true,
+                  settings: false,
+                  branchManagement: false,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+                CASHIER: {
+                  dashboard: false,
+                  pos: true,
+                  inventory: false,
+                  accounting: false,
+                  customers: false,
+                  reports: false,
+                  settings: false,
+                  branchManagement: false,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+                SALES: {
+                  dashboard: false,
+                  pos: true,
+                  inventory: false,
+                  accounting: false,
+                  customers: true,
+                  reports: true,
+                  settings: false,
+                  branchManagement: false,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+                PURCHASES: {
+                  dashboard: false,
+                  pos: false,
+                  inventory: true,
+                  accounting: false,
+                  customers: false,
+                  reports: true,
+                  settings: false,
+                  branchManagement: false,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+                HR: {
+                  dashboard: true,
+                  pos: false,
+                  inventory: false,
+                  accounting: false,
+                  customers: false,
+                  reports: false,
+                  settings: true,
+                  branchManagement: false,
+                  cashierManagement: true,
+                  systemReset: false,
+                },
+                ACCOUNTANT: {
+                  dashboard: true,
+                  pos: false,
+                  inventory: false,
+                  accounting: true,
+                  customers: false,
+                  reports: true,
+                  settings: false,
+                  branchManagement: false,
+                  cashierManagement: false,
+                  systemReset: false,
+                },
+              };
+
+              const mergedPermissions = {
+                ...(roleDefaultPermissions[role] || roleDefaultPermissions['CASHIER']),
+                ...(data.permissions || {})
+              };
+
               setUser({
                 ...data,
-                role: role as any
+                role: role as any,
+                permissions: mergedPermissions
               });
             } else {
               // If user exists in Auth but not in Firestore, we might need to handle it

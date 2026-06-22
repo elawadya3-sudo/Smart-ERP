@@ -120,60 +120,145 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     }
   }
 
-  if (user.role === 'ADMIN' && user.permissions) {
+  if (user.role !== 'ADMIN' && !user.isRoot && user.permissions) {
     const permissions = user.permissions as any;
 
     // 1. Handle auto-redirection from root if dashboard is disabled
     if (path === '/' && !permissions.dashboard) {
-      const pathMap: Record<string, string> = {
-        pos: '/pos',
-        inventory: '/inventory',
-        accounting: '/accounting',
-        customers: '/customers',
-        reports: '/reports',
-        settings: '/settings',
-        branchManagement: '/branch-management',
-        cashierManagement: '/admin/cashiers'
-      };
+      // Include granular sub-keys so cashiers with only sub-permissions get redirected correctly
+      const pathMap: Array<[string, string]> = [
+        ['pos', '/pos'],
+        ['inventory', '/inventory'],
+        ['inventory_products', '/inventory/products'],
+        ['inventory_receipt', '/inventory/receipt'],
+        ['inventory_salesreturns', '/inventory/sales-returns'],
+        ['inventory_transfer_receipt', '/inventory/transfer-receipt'],
+        ['inventory_purchasereturns', '/inventory/purchase-returns'],
+        ['inventory_issue', '/inventory/stock-issue'],
+        ['inventory_transfers', '/inventory/transfers'],
+        ['inventory_stocktaking', '/inventory/stock-taking'],
+        ['inventory_approval', '/inventory/approval'],
+        ['inventory_payable', '/inventory/accounts-payable'],
+        ['inventory_reports', '/inventory/reports'],
+        ['accounting', '/accounting'],
+        ['accounting_journal', '/accounting/journal'],
+        ['accounting_cash', '/accounting/cash'],
+        ['accounting_chart', '/accounting/accounts'],
+        ['customers', '/customers'],
+        ['reports', '/reports'],
+        ['reports_history', '/sales/history'],
+        ['reports_cash', '/cash/reports'],
+        ['reports_center', '/reports/center'],
+        ['settings', '/settings'],
+        ['branchManagement', '/branch-management'],
+        ['cashierManagement', '/admin/cashiers'],
+      ];
 
-      // Find the first module the user HAS permission for
-      const firstAllowedModule = Object.entries(pathMap).find(([key]) => permissions[key]);
-      
+      const firstAllowedModule = pathMap.find(([key]) => !!permissions[key]);
       if (firstAllowedModule) {
         return <Navigate to={firstAllowedModule[1]} replace />;
       }
     }
 
-    // 2. Block access if explicitly denied for the current module
-    if (requiredPermission && !permissions[requiredPermission]) {
-      return (
-        <div className="h-screen w-screen flex items-center justify-center bg-gray-50 p-6" dir="rtl">
-          <div className="max-w-md w-full bg-white rounded-[3rem] p-12 shadow-2xl border border-blue-50 text-center space-y-8">
-            <div className="w-24 h-24 bg-blue-50 rounded-[2rem] flex items-center justify-center text-blue-600 mx-auto shadow-inner">
-              <ShieldAlert className="w-12 h-12" />
-            </div>
-            <div className="space-y-3">
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">منطقة محظورة</h2>
-              <p className="text-gray-500 font-bold leading-relaxed">عذراً، ليس لديك الصلاحيات الكافية للوصول إلى هذا القسم. يرجى مراجعة المسؤول الرئيسي لتعديل صلاحياتك.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
-              <button 
-                onClick={() => window.location.href = '/'}
-                className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all"
-              >
-                العودة للرئيسية
-              </button>
-              <button 
-                onClick={() => signOut()}
-                className="w-full bg-gray-50 text-gray-400 font-black py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-100 transition-all"
-              >
-                <LogOut className="w-5 h-5" />
-                تسجيل الخروج
-              </button>
+    // 2. Block access if explicitly denied for the current path.
+    // Supports both master keys (e.g. `inventory`) and granular sub-keys
+    // (e.g. `inventory_products`). A user is allowed if EITHER the master key
+    // OR the specific sub-key for the current path is true.
+    if (requiredPermission) {
+      // Mapping from exact URL path to its granular permission key
+      const subKeyMap: Record<string, string> = {
+        '/inventory/products':                'inventory_products',
+        '/inventory/product-ledger':          'inventory_products',
+        '/inventory/product-units':           'inventory_units',
+        '/inventory/item-map':                'inventory_itemmap',
+        '/inventory/warehouses':              'inventory_warehouses',
+        '/inventory/receipt':                 'inventory_receipt',
+        '/inventory/sales-returns':           'inventory_salesreturns',
+        '/inventory/transfer-receipt':        'inventory_transfer_receipt',
+        '/inventory/purchase-returns':        'inventory_purchasereturns',
+        '/inventory/stock-issue':             'inventory_issue',
+        '/inventory/branch-transfer-request': 'inventory_branchtransfer',
+        '/inventory/transfers':               'inventory_transfers',
+        '/inventory/opening-balance':         'inventory_opening',
+        '/inventory/stock-taking':            'inventory_stocktaking',
+        '/inventory/approval':                'inventory_approval',
+        '/inventory/accounts-payable':        'inventory_payable',
+        '/inventory/reports':                 'inventory_reports',
+        '/accounting/accounts':               'accounting_chart',
+        '/accounting/cost-centers':           'accounting_costcenters',
+        '/accounting/currencies':             'accounting_currencies',
+        '/accounting/check-stages':           'accounting_checkstages',
+        '/accounting/taxes':                  'accounting_taxes',
+        '/accounting/journal':                'accounting_journal',
+        '/accounting/cash':                   'accounting_cash',
+        '/cash/reports':                      'reports_cash',
+        '/sales/history':                     'reports_history',
+        '/reports/center':                    'reports_center',
+      };
+
+      // All granular sub-keys that belong to each master section
+      const sectionSubKeys: Record<string, string[]> = {
+        inventory: [
+          'inventory', 'inventory_products', 'inventory_units', 'inventory_itemmap',
+          'inventory_warehouses', 'inventory_receipt', 'inventory_salesreturns',
+          'inventory_transfer_receipt', 'inventory_purchasereturns', 'inventory_issue',
+          'inventory_branchtransfer', 'inventory_transfers', 'inventory_opening',
+          'inventory_stocktaking', 'inventory_approval', 'inventory_payable', 'inventory_reports',
+        ],
+        accounting: [
+          'accounting', 'accounting_chart', 'accounting_costcenters', 'accounting_currencies',
+          'accounting_checkstages', 'accounting_taxes', 'accounting_journal', 'accounting_cash',
+        ],
+        reports: [
+          'reports', 'reports_cash', 'reports_history', 'reports_center',
+        ],
+      };
+
+      const hasAccess = (() => {
+        // Master key granted → allow
+        if (permissions[requiredPermission]) return true;
+
+        const subKeys = sectionSubKeys[requiredPermission];
+        if (subKeys) {
+          // Exact sub-path key match
+          const exactSubKey = subKeyMap[path];
+          if (exactSubKey) return !!permissions[exactSubKey];
+          // Section root — allow if any sub-key is enabled
+          return subKeys.some(k => !!permissions[k]);
+        }
+        return false;
+      })();
+
+      if (!hasAccess) {
+        return (
+          <div className="h-screen w-screen flex items-center justify-center bg-gray-50 p-6" dir="rtl">
+            <div className="max-w-md w-full bg-white rounded-[3rem] p-12 shadow-2xl border border-blue-50 text-center space-y-8">
+              <div className="w-24 h-24 bg-blue-50 rounded-[2rem] flex items-center justify-center text-blue-600 mx-auto shadow-inner">
+                <ShieldAlert className="w-12 h-12" />
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">منطقة محظورة</h2>
+                <p className="text-gray-500 font-bold leading-relaxed">عذراً، ليس لديك الصلاحيات الكافية للوصول إلى هذا القسم. يرجى مراجعة المسؤول الرئيسي لتعديل صلاحياتك.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                <button 
+                  onClick={() => window.location.href = '/'}
+                  className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all"
+                >
+                  العودة للرئيسية
+                </button>
+                <button 
+                  onClick={() => signOut()}
+                  className="w-full bg-gray-50 text-gray-400 font-black py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-100 transition-all"
+                >
+                  <LogOut className="w-5 h-5" />
+                  تسجيل الخروج
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      );
+        );
+      }
     }
   }
 

@@ -20,6 +20,7 @@ import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { formatDate, cn } from '../../lib/utils';
 import { Warehouse, Product, InventoryTransaction, StockLevel } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { inventoryTransactionService } from '../../services/inventory';
 
 export default function StockTransfersPage() {
   const { user } = useAuth();
@@ -29,6 +30,7 @@ export default function StockTransfersPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [transferReceipts, setTransferReceipts] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingTransferId, setEditingTransferId] = useState<string | null>(null);
@@ -63,21 +65,7 @@ export default function StockTransfersPage() {
           const transfer = transfers.find(t => t && t.id === id);
           if (transfer) {
             try {
-              if (transfer.status === 'PENDING' && transfer.items && transfer.items.length > 0) {
-                const batch = writeBatch(db);
-                for (const item of transfer.items) {
-                  if (item && item.productId) {
-                    const productRef = doc(db, 'products', item.productId);
-                    const productSnap = await getDoc(productRef);
-                    if (productSnap.exists()) {
-                      const currentQty = productSnap.data().quantity || 0;
-                      batch.update(productRef, { quantity: currentQty + (item.quantity || 0) });
-                    }
-                  }
-                }
-                await batch.commit();
-              }
-              await deleteDoc(doc(db, 'inventory_transactions', id));
+              await inventoryTransactionService.deleteStockMovement(id, transfer);
               successCount++;
             } catch (err) {
               console.error(`Failed to delete transfer ${id}:`, err);
@@ -141,11 +129,17 @@ export default function StockTransfersPage() {
       setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    // Fetch Transfer Receipts
+    const unsubTR = onSnapshot(query(collection(db, 'transfer_receipts')), (snapshot) => {
+      setTransferReceipts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     return () => {
       unsubW();
       unsubP();
       unsubT();
       unsubO();
+      unsubTR();
     };
   }, []);
 
@@ -167,12 +161,12 @@ export default function StockTransfersPage() {
 
       // 2. Branch Warehouses
       branchWarehouses.forEach(bw => {
-        // Items Received (COMPLETED transfers to this branch)
-        const received = transfers
-          .filter(t => t && t.status === 'COMPLETED' && t.toWarehouseId === bw.id)
-          .reduce((acc, t) => {
-            const item = (t.items || []).find(i => i && i.productId === p.id);
-            return acc + (item?.quantity || 0);
+        // Items Received (RECEIVED/PARTIALLY_RECEIVED transfer receipts to this branch)
+        const received = transferReceipts
+          .filter(tr => tr && (tr.status === 'RECEIVED' || tr.status === 'PARTIALLY_RECEIVED') && tr.toWarehouseId === bw.id)
+          .reduce((acc, tr) => {
+            const item = (tr.items || []).find((i: any) => i && i.productId === p.id);
+            return acc + (item?.receivedQty || 0);
           }, 0);
 
         // Items Sent (COMPLETED transfers from this branch)
@@ -232,24 +226,12 @@ export default function StockTransfersPage() {
     if (window.confirm('هل أنت متأكد من حذف أمر النقل هذا؟')) {
       try {
         const transfer = transfers.find(t => t && t.id === id);
-        if (transfer && transfer.status === 'PENDING' && transfer.items && transfer.items.length > 0) {
-          const batch = writeBatch(db);
-          for (const item of transfer.items) {
-            if (item && item.productId) {
-              const productRef = doc(db, 'products', item.productId);
-              const productSnap = await getDoc(productRef);
-              if (productSnap.exists()) {
-                const currentQty = productSnap.data().quantity || 0;
-                batch.update(productRef, { quantity: currentQty + (item.quantity || 0) });
-              }
-            }
-          }
-          await batch.commit();
+        if (transfer) {
+          await inventoryTransactionService.deleteStockMovement(id, transfer);
         }
-        await deleteDoc(doc(db, 'inventory_transactions', id));
         setSelectedTransferIds(prev => prev.filter(item => item !== id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `inventory_transactions/${id}`);
+      } catch (error: any) {
+        alert(error.message || 'حدث خطأ أثناء حذف العملية');
       }
     }
   };
@@ -262,20 +244,30 @@ export default function StockTransfersPage() {
 
     if (editingTransferId) {
       try {
-        await updateDoc(doc(db, 'inventory_transactions', editingTransferId), {
-          toWarehouseId,
-          items: validItems.map(item => ({
-            productId: item.productId,
-            productName: products.find(p => p.id === item.productId)?.name || '',
-            quantity: item.quantity
-          }))
-        });
+        const oldTransfer = transfers.find(t => t.id === editingTransferId);
+        if (oldTransfer) {
+          const newTx = {
+            type: oldTransfer.type,
+            status: oldTransfer.status,
+            fromWarehouseId: oldTransfer.fromWarehouseId,
+            toWarehouseId,
+            items: validItems.map(item => ({
+              productId: item.productId,
+              productName: products.find(p => p.id === item.productId)?.name || '',
+              quantity: item.quantity
+            })),
+            createdBy: oldTransfer.createdBy,
+            reference: oldTransfer.reference || '',
+            notes: oldTransfer.notes || ''
+          };
+          await inventoryTransactionService.updateStockMovement(editingTransferId, oldTransfer, newTx);
+        }
         setIsModalOpen(false);
         setEditingTransferId(null);
         setToWarehouseId('');
         setTransferItems([{ productId: '', quantity: 1 }]);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `inventory_transactions/${editingTransferId}`);
+      } catch (error: any) {
+        alert(error.message || 'حدث خطأ أثناء تعديل المعاملة');
       }
     } else {
       const id = Math.random().toString(36).substr(2, 9);
@@ -284,8 +276,7 @@ export default function StockTransfersPage() {
         return;
       }
 
-      const newTransfer: any = {
-        id,
+      const newTransfer: Omit<InventoryTransaction, 'id' | 'createdAt'> = {
         type: 'TRANSFER',
         status: 'PENDING',
         fromWarehouseId: mainWarehouse?.id || '1',
@@ -295,33 +286,18 @@ export default function StockTransfersPage() {
           productName: products.find(p => p.id === item.productId)?.name || '',
           quantity: item.quantity
         })),
-        createdAt: new Date().toISOString(),
-        createdBy: user.uid
+        createdBy: user.uid,
+        reference: '',
+        notes: 'تحويل بضاعة'
       };
 
       try {
-        const batch = writeBatch(db);
-        
-        // 1. Create the transfer
-        const transferRef = doc(db, 'inventory_transactions', id);
-        batch.set(transferRef, newTransfer);
-
-        // 2. Deduct from main warehouse (products collection)
-        for (const item of newTransfer.items) {
-          const productRef = doc(db, 'products', item.productId);
-          const productSnap = await getDoc(productRef);
-          if (productSnap.exists()) {
-            const currentQty = productSnap.data().quantity || 0;
-            batch.update(productRef, { quantity: Math.max(0, currentQty - item.quantity) });
-          }
-        }
-
-        await batch.commit();
+        await inventoryTransactionService.createStockMovement(newTransfer);
         setIsModalOpen(false);
         setToWarehouseId('');
         setTransferItems([{ productId: '', quantity: 1 }]);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `inventory_transactions/${id}`);
+      } catch (error: any) {
+        alert(error.message || 'حدث خطأ أثناء إنشاء عملية التحويل');
       }
     }
   };
@@ -331,28 +307,16 @@ export default function StockTransfersPage() {
     if (!transfer || transfer.status !== 'PENDING') return;
 
     try {
-      const batch = writeBatch(db);
-
-      // Update the transfer status
-      const transferRef = doc(db, 'inventory_transactions', transferId);
-      batch.update(transferRef, { status: newStatus });
-
-      // If CANCELLED, add back the quantities to the products (Main Warehouse)
-      if (newStatus === 'CANCELLED' && transfer.items && transfer.items.length > 0) {
-        for (const item of transfer.items) {
-          if (!item || !item.productId || !item.quantity) continue;
-          const productRef = doc(db, 'products', item.productId);
-          const productSnap = await getDoc(productRef);
-          if (productSnap.exists()) {
-            const currentQty = productSnap.data().quantity || 0;
-            batch.update(productRef, { quantity: currentQty + item.quantity });
-          }
-        }
+      if (newStatus === 'COMPLETED') {
+        await inventoryTransactionService.approveStockMovement(transfer);
+      } else {
+        await updateDoc(doc(db, 'inventory_transactions', transferId), { 
+          status: 'CANCELLED',
+          updatedAt: new Date().toISOString()
+        });
       }
-
-      await batch.commit();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `inventory_transactions/${transferId}`);
+    } catch (error: any) {
+      alert(error.message || 'حدث خطأ أثناء تحديث حالة الطلب');
     }
   };
 
@@ -615,7 +579,7 @@ export default function StockTransfersPage() {
                initial={{ scale: 0.95, opacity: 0, y: 20 }}
                animate={{ scale: 1, opacity: 1, y: 0 }}
                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-               className="relative w-full max-w-3xl bg-white rounded-[3rem] p-10 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+               className="erp-modal max-w-3xl max-h-[90vh] flex flex-col"
             >
               <div className="text-center space-y-2 shrink-0 mb-8">
                 <h3 className="text-3xl font-black text-gray-900 tracking-tight">

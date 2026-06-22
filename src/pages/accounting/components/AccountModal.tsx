@@ -139,13 +139,13 @@ export const AccountModal: React.FC<Props> = ({ isOpen, onClose, onSave, initial
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-gray-700">كود الحساب <span className="text-red-500">*</span></label>
                       <input {...register('code')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" dir="ltr" placeholder="مثال: 10101" />
-                      {errors.code && <p className="text-xs text-red-500 font-bold">{errors.code.message}</p>}
+                      {errors.code && <p className="text-xs text-red-500 font-bold">{errors.code.message as React.ReactNode}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-gray-700">اسم الحساب <span className="text-red-500">*</span></label>
                       <input {...register('name')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="مثال: البنك الأهلي" />
-                      {errors.name && <p className="text-xs text-red-500 font-bold">{errors.name.message}</p>}
+                      {errors.name && <p className="text-xs text-red-500 font-bold">{errors.name.message as React.ReactNode}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -188,13 +188,13 @@ export const AccountModal: React.FC<Props> = ({ isOpen, onClose, onSave, initial
                       <div className="space-y-2">
                         <label className="text-sm font-bold text-gray-700">الرصيد الافتتاحي <span className="text-red-500">*</span></label>
                         <input type="number" step="0.01" {...register('openingBalance')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" dir="ltr" />
-                        {errors.openingBalance && <p className="text-xs text-red-500 font-bold">{errors.openingBalance.message}</p>}
+                        {errors.openingBalance && <p className="text-xs text-red-500 font-bold">{errors.openingBalance.message as React.ReactNode}</p>}
                       </div>
 
                       <div className="space-y-2">
                         <label className="text-sm font-bold text-gray-700">العملة <span className="text-red-500">*</span></label>
                         <input {...register('currency')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" dir="ltr" placeholder="EGP" />
-                        {errors.currency && <p className="text-xs text-red-500 font-bold">{errors.currency.message}</p>}
+                        {errors.currency && <p className="text-xs text-red-500 font-bold">{errors.currency.message as React.ReactNode}</p>}
                       </div>
                     </div>
 

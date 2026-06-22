@@ -20,6 +20,7 @@ import { accountingService } from '../../services/accounting';
 import { useAccountingStore } from '../../store/accountingStore';
 import { JournalEntry } from '../../types';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
+import { useRecordNavigatorStore } from '../../store/recordNavigatorStore';
 
 // ─── Journal Line ─────────────────────────────────────────────────────────────
 interface JournalLine {
@@ -324,6 +325,7 @@ export default function JournalEntriesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const { accounts, loadAccounts } = useAccountingStore();
+  const recordNav = useRecordNavigatorStore();
 
   const load = async () => {
     setLoading(true);
@@ -341,6 +343,31 @@ export default function JournalEntriesPage() {
     e.description.toLowerCase().includes(search.toLowerCase()) ||
     (e.reference || '').toLowerCase().includes(search.toLowerCase())
   );
+
+  const selectedIndex = filtered.findIndex(e => e.id === expanded);
+  const goToEntry = (index: number) => {
+    const target = filtered[index];
+    if (target) setExpanded(target.id);
+  };
+
+  useEffect(() => {
+    if (expanded) {
+      recordNav.register({
+        currentIndex: selectedIndex >= 0 ? selectedIndex : 0,
+        total: filtered.length,
+        label: 'القيد المالي الحالي',
+        onFirst: () => goToEntry(0),
+        onPrevious: () => goToEntry(Math.max(0, selectedIndex - 1)),
+        onNext: () => goToEntry(Math.min(filtered.length - 1, selectedIndex + 1)),
+        onLast: () => goToEntry(filtered.length - 1)
+      });
+    } else {
+      recordNav.unregister();
+    }
+    return () => {
+      recordNav.unregister();
+    };
+  }, [expanded, selectedIndex, filtered.length]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">

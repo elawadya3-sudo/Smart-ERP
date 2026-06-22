@@ -55,9 +55,9 @@ const INITIAL: FormData = {
 
 /** Pre-filled data for the current running app instance */
 const CURRENT_APP_PRESET: FormData = {
-  name: 'Footprint ERP & POS — النسخة الرئيسية',
+  name: 'NEZAM PRO — النسخة الرئيسية',
   dbId: CURRENT_APP_DB_ID,
-  adminEmail: 'admin@footprint.local',
+  adminEmail: 'admin@nezampro.local',
   contactPhone: '',
   address: '',
   status: 'active',

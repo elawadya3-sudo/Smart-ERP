@@ -22,20 +22,25 @@ import {
   Edit3,
   ArrowRightLeft,
   Building2,
-  Send
+  Send,
+  Wallet,
+  Smartphone,
+  QrCode,
+  Loader2
 } from 'lucide-react';
 import { productsService, ordersService } from '../services/firestore';
-import { Product, OrderItem, StockLevel, Order, Warehouse, InventoryTransaction } from '../types';
+import { Product, OrderItem, StockLevel, Order, Warehouse, InventoryTransaction, Customer, ProductVariant } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, onSnapshot, orderBy, updateDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, setDoc, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useSearchParams } from 'react-router-dom';
 
 import { usePOS } from '../context/POSContext';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
+import JsBarcode from 'jsbarcode';
 
 export default function POS() {
   const { user } = useAuth();
@@ -46,18 +51,22 @@ export default function POS() {
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [transfers, setTransfers] = useState<InventoryTransaction[]>([]);
+  const [variantSelectorProduct, setVariantSelectorProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isOpeningShift, setIsOpeningShift] = useState(false);
   const [openingCash, setOpeningCash] = useState(0);
   const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
   const [actualCash, setActualCash] = useState(0);
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
+  const [showReturnPanel, setShowReturnPanel] = useState(false);
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [holdNote, setHoldNote] = useState('');
   const [editingPendingInvoiceId, setEditingPendingInvoiceId] = useState<string | null>(null);
-  const [pendingPaymentMethod, setPendingPaymentMethod] = useState<'cash' | 'visa'>('cash');
+  const [pendingPaymentMethod, setPendingPaymentMethod] = useState<'cash' | 'visa' | 'debt' | 'vodafone' | 'instapay'>('cash');
   const [lastTransferId, setLastTransferId] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   // Cross-branch tab state
@@ -78,6 +87,240 @@ export default function POS() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [showIncomingRequestsModal, setShowIncomingRequestsModal] = useState(false);
   const isFirstLoad = React.useRef(true);
+
+  // Customer Selector State
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside for customer dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch Customers
+  useEffect(() => {
+    const qC = query(collection(db, 'customers'));
+    const unsubC = onSnapshot(qC, (snapshot) => {
+      setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
+    });
+    return () => unsubC();
+  }, []);
+
+  // Sync default customer
+  useEffect(() => {
+    if (customers.length > 0 && selectedBranchId) {
+      const defaultCustomerId = localStorage.getItem(`default_pos_customer_id_${selectedBranchId}`);
+      if (defaultCustomerId) {
+        const found = customers.find(c => c.id === defaultCustomerId && c.branchId === selectedBranchId);
+        if (found) {
+          setSelectedCustomer(found);
+          setCustomerSearchTerm(`${found.name} (${found.phone})`);
+          return;
+        }
+      }
+      setSelectedCustomer(null);
+      setCustomerSearchTerm('');
+    }
+  }, [customers, selectedBranchId]);
+
+  // Generate barcode when selectedDetail changes
+  useEffect(() => {
+    setShowReturnPanel(false);
+    setReturnQuantities({});
+    if (selectedDetail && selectedDetail.id) {
+      const timer = setTimeout(() => {
+        try {
+          JsBarcode('#invoice-barcode-svg', selectedDetail.id, {
+            format: 'CODE128',
+            width: 1.6,
+            height: 45,
+            displayValue: true,
+            fontSize: 12,
+            margin: 2
+          });
+        } catch (err) {
+          console.warn("JsBarcode invoice error:", err);
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedDetail]);
+
+  const handlePrintReceipt = (inv: Order) => {
+    const printWindow = window.open('', '_blank', 'width=450,height=600');
+    if (!printWindow) {
+      alert('تم منع فتح النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة.');
+      return;
+    }
+
+    const customer = customers.find(c => c.id === inv.customerId);
+
+    const itemsHtml = (inv.items || []).map(item => `
+      <tr style="border-bottom: 1px dashed #eee;">
+        <td style="padding: 6px 0; text-align: right; font-weight: bold;">${item.name}</td>
+        <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
+        <td style="padding: 6px 0; text-align: left;">${formatCurrency(item.price)}</td>
+      </tr>
+    `).join('');
+
+    const content = `
+      <!DOCTYPE html>
+      <html dir="rtl">
+      <head>
+        <meta charset="utf-8">
+        <title>فاتورة مبسطة - ${inv.id}</title>
+        <style>
+          @page { size: 80mm auto; margin: 0; }
+          body { 
+            font-family: 'Cairo', system-ui, -apple-system, sans-serif; 
+            margin: 0; 
+            padding: 8mm 5mm; 
+            width: 70mm; 
+            font-size: 11px; 
+            line-height: 1.4; 
+            color: #000;
+          }
+          .text-center { text-align: center; }
+          .bold { font-weight: bold; }
+          .header { margin-bottom: 6mm; }
+          .store-name { font-size: 16px; font-weight: 900; margin: 0 0 2mm 0; }
+          .divider { border-top: 1px dashed #000; margin: 4mm 0; }
+          table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 11px; }
+          .total-row { font-size: 12px; font-weight: 900; }
+          .barcode-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 6mm; }
+          .barcode-container svg { max-width: 60mm; height: auto; }
+          .footer-note { font-size: 9px; margin-top: 4mm; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="text-center header">
+          <h2 class="store-name">${settings?.storeName || 'مؤسسة بصمة'}</h2>
+          <div>فرع: ${branchWarehouse?.name || 'الفرع'}</div>
+          <div>رقم الفاتورة: ${inv.id}</div>
+          <div>التاريخ: ${new Date(inv.createdAt).toLocaleString('ar-EG')}</div>
+          <div>الكاشير: ${user?.name || 'نظام البيع'}</div>
+          ${customer ? `
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #000; font-weight: bold; font-size: 10px; text-align: right;">
+              <div>العميل: ${customer.name}</div>
+              ${customer.phone ? `<div>هاتف العميل: ${customer.phone}</div>` : ''}
+              ${customer.address ? `<div>عنوان العميل: ${customer.address}</div>` : ''}
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="divider"></div>
+
+        <table>
+          <thead>
+            <tr style="border-bottom: 1px solid #000; font-weight: bold;">
+              <th style="text-align: right; padding-bottom: 4px;">الصنف</th>
+              <th style="text-align: center; padding-bottom: 4px;">الكمية</th>
+              <th style="text-align: left; padding-bottom: 4px;">السعر</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div style="space-y-1.5">
+          <div style="display: flex; justify-content: space-between;">
+            <span>المجموع الفرعي:</span>
+            <span>${formatCurrency(inv.subtotal)}</span>
+          </div>
+          ${inv.tax ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>الضريبة (${settings?.taxRate || 0}%):</span>
+            <span>${formatCurrency(inv.tax)}</span>
+          </div>
+          ` : ''}
+          <div class="total-row" style="display: flex; justify-content: space-between; margin-top: 2px;">
+            <span>المجموع النهائي:</span>
+            <span>${formatCurrency(inv.total)}</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 4mm; font-size: 10px;">
+          <span>طريقة الدفع:</span>
+          <span class="bold">${
+            inv.paymentMethod === 'cash' ? 'نقداً (كاش)' : 
+            inv.paymentMethod === 'visa' ? 'بطاقة (فيزا)' : 
+            inv.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
+            inv.paymentMethod === 'instapay' ? 'انستا باي' : 
+            'آجل (على الحساب)'
+          }</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="barcode-container" id="printable-barcode-wrapper">
+          <svg id="print-barcode-svg"></svg>
+        </div>
+
+        <div class="footer-note">
+          شكراً لتسوقكم معنا!
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+        <script>
+          window.onload = function() {
+            try {
+              JsBarcode("#print-barcode-svg", "${inv.id}", {
+                format: "CODE128",
+                width: 1.5,
+                height: 40,
+                displayValue: true,
+                fontSize: 10,
+                margin: 0
+              });
+            } catch (e) {
+              console.error("Barcode generation failed in print window:", e);
+            }
+            setTimeout(function() {
+              window.print();
+              window.close();
+            }, 350);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+  };
+
+  const getWhatsAppUrl = (phone: string, invoice: any) => {
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('0') && cleaned.length === 11) {
+      cleaned = '2' + cleaned;
+    } else if (cleaned.length === 10 && !cleaned.startsWith('0') && !cleaned.startsWith('2')) {
+      cleaned = '20' + cleaned;
+    }
+    const storeName = settings?.storeName || 'متجرنا';
+    const dateStr = new Date(invoice.createdAt).toLocaleDateString('ar-EG');
+    const itemsText = (invoice.items || []).map((item: any) => `- ${item.name} (الكمية: ${item.quantity})`).join('\n');
+    const message = `مرحباً ${customers.find(c => c.id === invoice.customerId)?.name || ''}،\nشكراً لتسوقك معنا في ${storeName}.\n\nتفاصيل فاتورتك رقم: ${invoice.id}\nالتاريخ: ${dateStr}\n\nالأصناف:\n${itemsText}\n\nالإجمالي النهائي: ${formatCurrency(invoice.total)}\nطريقة الدفع: ${
+      invoice.paymentMethod === 'cash' ? 'نقدي' : 
+      invoice.paymentMethod === 'visa' ? 'بطاقة ائتمان' : 
+      invoice.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
+      invoice.paymentMethod === 'instapay' ? 'انستا باي' : 
+      'آجل'
+    }\n\nيسعدنا دائماً خدمتكم!`;
+    return `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
+  };
 
   // Incoming transfer requests directed to this branch
   const incomingRequests = React.useMemo(() => {
@@ -202,7 +445,6 @@ export default function POS() {
       videoRef.current.srcObject = null;
     }
     if (scannerRef.current) {
-      scannerRef.current.reset();
       scannerRef.current = null;
     }
   };
@@ -211,9 +453,38 @@ export default function POS() {
     const normalized = barcode.trim();
     if (!normalized) return;
 
-    const exactMatch = availableProducts.find(p => String(p.barcode) === normalized || p.name === normalized);
-    if (exactMatch) {
-      addToCart(exactMatch);
+    // Check if barcode represents an invoice
+    const matchedInvoice = contextInvoices.find(inv => 
+      inv.id === normalized || 
+      inv.id === `INV-${normalized.toUpperCase()}` || 
+      (inv.id && inv.id.endsWith(normalized.toUpperCase()))
+    );
+    if (matchedInvoice) {
+      setSelectedDetail(matchedInvoice);
+      setSearchTerm('');
+      return;
+    }
+
+    let matchedProduct: Product | undefined = undefined;
+    let matchedVariant: ProductVariant | undefined = undefined;
+
+    for (const p of availableProducts) {
+      if (String(p.barcode) === normalized || p.name === normalized) {
+        matchedProduct = p;
+        break;
+      }
+      if (p.variants) {
+        const foundV = p.variants.find(v => String(v.barcode) === normalized || String(v.sku) === normalized);
+        if (foundV) {
+          matchedProduct = p;
+          matchedVariant = foundV;
+          break;
+        }
+      }
+    }
+
+    if (matchedProduct) {
+      addToCart(matchedProduct, matchedVariant);
       setSearchTerm('');
       return;
     }
@@ -226,9 +497,38 @@ export default function POS() {
     const normalized = searchTerm.trim();
     if (!normalized) return;
 
-    const exactMatch = availableProducts.find(p => String(p.barcode) === normalized || p.name.toLowerCase() === normalized.toLowerCase());
-    if (exactMatch) {
-      addToCart(exactMatch);
+    // Check if barcode represents an invoice
+    const matchedInvoice = contextInvoices.find(inv => 
+      inv.id === normalized || 
+      inv.id === `INV-${normalized.toUpperCase()}` || 
+      (inv.id && inv.id.endsWith(normalized.toUpperCase()))
+    );
+    if (matchedInvoice) {
+      setSelectedDetail(matchedInvoice);
+      setSearchTerm('');
+      return;
+    }
+
+    let matchedProduct: Product | undefined = undefined;
+    let matchedVariant: ProductVariant | undefined = undefined;
+
+    for (const p of availableProducts) {
+      if (String(p.barcode) === normalized || p.name.toLowerCase() === normalized.toLowerCase()) {
+        matchedProduct = p;
+        break;
+      }
+      if (p.variants) {
+        const foundV = p.variants.find(v => String(v.barcode) === normalized || String(v.sku).toLowerCase() === normalized.toLowerCase());
+        if (foundV) {
+          matchedProduct = p;
+          matchedVariant = foundV;
+          break;
+        }
+      }
+    }
+
+    if (matchedProduct) {
+      addToCart(matchedProduct, matchedVariant);
       setSearchTerm('');
     }
   };
@@ -262,43 +562,107 @@ export default function POS() {
     if (!selectedBranchId) return {};
     const stockMap: Record<string, number> = {};
 
-    // 1. Calculate incoming transfers
+    // 1. Calculate incoming transfers & receipts
     transfers
-      .filter(t => t.type === 'TRANSFER' && t.status === 'COMPLETED' && t.toWarehouseId === selectedBranchId)
+      .filter(t => (t.type === 'TRANSFER' || t.type === 'RECEIPT') && t.status === 'COMPLETED' && t.toWarehouseId === selectedBranchId)
       .forEach(t => {
         t.items?.forEach(item => {
-          stockMap[item.productId] = (stockMap[item.productId] || 0) + (item.quantity || 0);
+          const key = item.sku || item.productId;
+          stockMap[key] = (stockMap[key] || 0) + (item.quantity || 0);
+          if (item.sku && item.productId) {
+            stockMap[item.productId] = (stockMap[item.productId] || 0) + (item.quantity || 0);
+          }
         });
       });
 
-    // 2. Subtract outgoing sales (completed invoices only)
+    // 2. Subtract outgoing sales (completed and partially returned invoices)
     contextInvoices
-      .filter(inv => inv.branchId === selectedBranchId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
+      .filter(inv => inv.branchId === selectedBranchId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status))
       .forEach(inv => {
         inv.items?.forEach(item => {
-          stockMap[item.productId] = (stockMap[item.productId] || 0) - (item.quantity || 0);
+          const qty = (item.quantity || 0) - (item.returnedQuantity || 0);
+          const itemSku = item.variant?.sku || item.sku;
+          const key = itemSku || item.productId;
+          stockMap[key] = (stockMap[key] || 0) - qty;
+          if (itemSku && item.productId) {
+            stockMap[item.productId] = (stockMap[item.productId] || 0) - qty;
+          }
         });
       });
 
     // 3. Subtract outgoing transfers (to other branches)
     transfers
-      .filter(t => t.type === 'TRANSFER' && t.status === 'COMPLETED' && t.fromWarehouseId === selectedBranchId)
+      .filter(t => t.type === 'TRANSFER' && (t.status === 'COMPLETED' || t.status === 'SHIPPED') && t.fromWarehouseId === selectedBranchId)
       .forEach(t => {
         t.items?.forEach(item => {
-          stockMap[item.productId] = (stockMap[item.productId] || 0) - (item.quantity || 0);
+          const key = item.sku || item.productId;
+          stockMap[key] = (stockMap[key] || 0) - (item.quantity || 0);
+          if (item.sku && item.productId) {
+            stockMap[item.productId] = (stockMap[item.productId] || 0) - (item.quantity || 0);
+          }
         });
       });
 
     return stockMap;
   }, [transfers, contextInvoices, selectedBranchId]);
 
+  const isMainBranch = branchWarehouse?.type === 'MAIN' || branchWarehouse?.id === '1';
+
+  // Helper to get variant stock for a specific branch
+  const getVariantBranchStock = (product: Product, variant: ProductVariant) => {
+    const sku = variant.sku || `${product.sku || 'PROD'}-${variant.size}-${variant.color}`;
+    const calculatedStock = branchStockMap[sku] || 0;
+    
+    // If we are in the main branch, we add the variant's initial quantity as the base
+    if (isMainBranch) {
+      const initialQty = Number(variant.quantity) || 0;
+      return Math.max(0, initialQty + calculatedStock);
+    }
+    
+    return Math.max(0, calculatedStock);
+  };
+
+  // Helper to get overall product stock for a specific branch
+  const getProductBranchStock = (product: Product) => {
+    if (product.variants && product.variants.length > 0) {
+      // Sum of all its variants' branch stocks
+      return product.variants.reduce((sum, v) => sum + getVariantBranchStock(product, v), 0);
+    }
+    
+    const calculatedStock = branchStockMap[product.id] || 0;
+    if (isMainBranch) {
+      const initialQty = Number(product.quantity || (product as any).initialQuantity || 0);
+      return Math.max(0, initialQty + calculatedStock);
+    }
+    return Math.max(0, calculatedStock);
+  };
+
   // Memoized available products list
   const availableProducts = React.useMemo(() => {
     return products.map(p => ({
       ...p,
-      branchStock: Math.max(0, branchStockMap[p.id] || 0)
-    })).filter(p => p.branchStock > 0);
-  }, [products, branchStockMap]);
+      branchStock: getProductBranchStock(p)
+    })).filter(p => {
+      if ((p as any).isDraft) return false;
+      if (p.warehouseId === selectedBranchId) return true;
+
+      // Check if product was received or transferred to this branch
+      const hasIncoming = transfers.some(t => 
+        (t.type === 'TRANSFER' || t.type === 'RECEIPT') && 
+        t.status === 'COMPLETED' && 
+        t.toWarehouseId === selectedBranchId &&
+        t.items?.some(item => {
+          const itemSku = item.sku || item.productId;
+          if (item.productId === p.id) return true;
+          if (p.variants) {
+            return p.variants.some(v => v.sku === itemSku || `${p.sku || 'PROD'}-${v.size}-${v.color}` === itemSku);
+          }
+          return false;
+        })
+      );
+      return hasIncoming;
+    });
+  }, [products, branchStockMap, selectedBranchId, branchWarehouse, transfers]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
@@ -310,8 +674,13 @@ export default function POS() {
 
   const filteredProducts = React.useMemo(() => {
     return availableProducts.filter(p => {
+      const matchesVariant = p.variants?.some(v => 
+        (v.sku && v.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (v.barcode && String(v.barcode).toLowerCase().includes(searchTerm.toLowerCase()))
+      );
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.barcode && String(p.barcode).toLowerCase().includes(searchTerm.toLowerCase()));
+        (p.barcode && String(p.barcode).toLowerCase().includes(searchTerm.toLowerCase())) ||
+        matchesVariant;
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
@@ -451,38 +820,75 @@ export default function POS() {
     );
   }
 
-  const addToCart = (product: Product & { branchStock: number }) => {
-    const existing = cart.find(item => item.productId === product.id);
-    const currentQty = existing ? existing.quantity : 0;
+  const addToCart = (product: Product & { branchStock?: number }, selectedVariant?: ProductVariant) => {
+    if (product.variants && product.variants.length > 0 && !selectedVariant) {
+      setVariantSelectorProduct(product);
+      return;
+    }
 
-    if (currentQty + 1 > product.branchStock) {
+    const sku = selectedVariant
+      ? (selectedVariant.sku || `${product.sku || 'PROD'}-${selectedVariant.size}-${selectedVariant.color}`)
+      : product.id;
+
+    const availableStock = selectedVariant
+      ? getVariantBranchStock(product, selectedVariant)
+      : (product.branchStock ?? getProductBranchStock(product));
+
+    const existing = cart.find(item => {
+      if (selectedVariant) {
+        return item.productId === product.id &&
+               item.variant?.size === selectedVariant.size &&
+               item.variant?.color === selectedVariant.color;
+      }
+      return item.productId === product.id && !item.variant;
+    });
+
+    const currentQty = existing ? existing.quantity : 0;
+    if (product.trackInventory !== false && currentQty + 1 > availableStock) {
       alert('عذراً، الكمية المطلوبة تتجاوز المتاح في المخزن الفرعي');
       return;
     }
 
+    const displayName = selectedVariant
+      ? `${product.name} (${selectedVariant.size ? `مقاس: ${selectedVariant.size}` : ''}${selectedVariant.size && selectedVariant.color ? ' / ' : ''}${selectedVariant.color ? `لون: ${selectedVariant.color}` : ''})`
+      : product.name;
+
     if (existing) {
-      setCart(cart.map(item =>
-        item.productId === product.id
+      setCart(cart.map(item => {
+        const matches = selectedVariant
+          ? (item.productId === product.id && item.variant?.size === selectedVariant.size && item.variant?.color === selectedVariant.color)
+          : (item.productId === product.id && !item.variant);
+
+        return matches
           ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
-          : item
-      ));
+          : item;
+      }));
     } else {
       setCart([...cart, {
         productId: product.id,
-        name: product.name,
+        name: displayName,
+        sku: sku,
         quantity: 1,
-        price: product.sellingPrice,
-        originalPrice: product.sellingPrice,
+        price: selectedVariant ? (selectedVariant.price || product.sellingPrice) : product.sellingPrice,
+        originalPrice: selectedVariant ? (selectedVariant.price || product.sellingPrice) : product.sellingPrice,
         discount: 0,
         minSellingPrice: product.minSellingPrice || 0,
-        total: product.sellingPrice
+        total: selectedVariant ? (selectedVariant.price || product.sellingPrice) : product.sellingPrice,
+        variant: selectedVariant ? {
+          size: selectedVariant.size,
+          color: selectedVariant.color,
+          sku: sku
+        } : undefined
       }]);
     }
+
+    setVariantSelectorProduct(null);
   };
 
-  const updateDiscount = (productId: string, discount: number) => {
+  const updateDiscount = (itemSkuOrId: string, discount: number) => {
     setCart(cart.map(item => {
-      if (item.productId === productId) {
+      const currentKey = item.sku || item.productId;
+      if (currentKey === itemSkuOrId) {
         const minPrice = item.minSellingPrice || 0;
         const newPrice = item.originalPrice - discount;
 
@@ -502,25 +908,33 @@ export default function POS() {
     }));
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
-    const product = availableProducts.find(p => p.id === productId);
+  const updateQuantity = (itemSkuOrId: string, delta: number) => {
+    const item = cart.find(i => (i.sku || i.productId) === itemSkuOrId);
+    if (!item) return;
+
+    const product = availableProducts.find(p => p.id === item.productId);
     if (!product) return;
 
-    setCart(cart.map(item => {
-      if (item.productId === productId) {
-        const newQty = Math.max(1, item.quantity + delta);
-        if (newQty > product.branchStock) {
+    const availableStock = item.variant
+      ? getVariantBranchStock(product, item.variant as any)
+      : product.branchStock;
+
+    setCart(cart.map(i => {
+      const currentKey = i.sku || i.productId;
+      if (currentKey === itemSkuOrId) {
+        const newQty = Math.max(1, i.quantity + delta);
+        if (product.trackInventory !== false && newQty > availableStock) {
           alert('الكمية المتاحة لا تكفي');
-          return item;
+          return i;
         }
-        return { ...item, quantity: newQty, total: newQty * item.price };
+        return { ...i, quantity: newQty, total: newQty * i.price };
       }
-      return item;
+      return i;
     }));
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(cart.filter(item => item.productId !== productId));
+  const removeFromCart = (itemSkuOrId: string) => {
+    setCart(cart.filter(item => (item.sku || item.productId) !== itemSkuOrId));
   };
 
   const subtotal = cart.reduce((acc, item) => acc + item.total, 0);
@@ -528,12 +942,19 @@ export default function POS() {
   const tax = subtotal * (taxRate / 100);
   const total = subtotal + tax;
 
-  const handleCheckout = async (method: 'cash' | 'visa') => {
+  const handleCheckout = async (method: 'cash' | 'visa' | 'debt' | 'vodafone' | 'instapay') => {
+    if (isSaving) return;
     if (!user?.uid) {
       alert('لم يتم تحميل بيانات المستخدم بعد. يرجى تسجيل الدخول أو إعادة تحميل الصفحة.');
       return;
     }
 
+    if (method === 'debt' && (!selectedCustomer || selectedCustomer.id === 'WALK-IN')) {
+      alert('يجب اختيار عميل مسجل لإجراء عملية البيع الآجل.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       const newInvoice: Order = {
         id: `INV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
@@ -547,18 +968,64 @@ export default function POS() {
         shiftId: currentShift.id,
         branchId: selectedBranchId,
         createdAt: new Date().toISOString(),
-        customerId: 'WALK-IN',
+        customerId: selectedCustomer ? selectedCustomer.id : 'WALK-IN',
         status: 'COMPLETED'
       };
 
       await addInvoice(newInvoice);
 
+      // Update customer balance and loyalty points if a registered customer is selected
+      if (selectedCustomer && selectedCustomer.id !== 'WALK-IN') {
+        const pointsToAdd = Math.floor(total / 10) || 0;
+        let updateData: any = {
+          points: (selectedCustomer.points || 0) + pointsToAdd
+        };
+
+        if (method === 'debt') {
+          let currentBalance = selectedCustomer.balance || 0;
+          let currentType = selectedCustomer.balanceType || 'debit';
+          let newBalance = 0;
+          let newType: 'credit' | 'debit' = 'debit';
+
+          if (currentType === 'credit') {
+            if (currentBalance >= total) {
+              newBalance = currentBalance - total;
+              newType = 'credit';
+            } else {
+              newBalance = total - currentBalance;
+              newType = 'debit';
+            }
+          } else {
+            // debit
+            newBalance = currentBalance + total;
+            newType = 'debit';
+          }
+
+          updateData.balance = newBalance;
+          updateData.balanceType = newType;
+        }
+
+        await updateDoc(doc(db, 'customers', selectedCustomer.id), updateData);
+      }
+
+      // Automatically trigger thermal receipt printing
+      handlePrintReceipt(newInvoice);
+
+      // Show "تم التحصيل وجاري الطباعة..." for 2 seconds
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       setIsSuccess(true);
       setCart([]);
       setIsCheckoutOpen(false);
+      setSelectedCustomer(null);
+      setCustomerSearchTerm('');
+      setSelectedDetail(newInvoice);
       setTimeout(() => setIsSuccess(false), 3000);
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء حفظ الفاتورة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -666,6 +1133,12 @@ export default function POS() {
       return;
     }
 
+    const canDelete = user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_delete_invoice;
+    if (!canDelete) {
+      alert('عذراً، ليس لديك صلاحية إلغاء/حذف الفواتير المعلقة.');
+      return;
+    }
+
     if (!window.confirm('هل أنت متأكد من حذف هذه الفاتورة المعلقة؟ لا يمكن التراجع عن هذا الإجراء.')) return;
 
     try {
@@ -753,7 +1226,7 @@ export default function POS() {
               <div key={inv.id} className="bg-white rounded-[2rem] border border-amber-100 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-black text-gray-900">#{inv.id?.toString().split('-')[1] || inv.id}</p>
+                    <p className="text-sm font-black text-gray-900">#{inv.id}</p>
                     <p className="text-xs text-gray-400 mt-1">{new Date(inv.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <span className="text-xs font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-3 py-1 rounded-full">قيد الانتظار</span>
@@ -772,12 +1245,14 @@ export default function POS() {
                   >
                     فتح للتعديل
                   </button>
-                  <button
-                    onClick={() => deletePendingInvoice(inv.id || '')}
-                    className="px-4 py-2 bg-red-50 text-red-600 rounded-2xl text-sm font-black hover:bg-red-100 transition-all border border-red-100"
-                  >
-                    إلغاء الفاتورة
-                  </button>
+                  {(user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_delete_invoice) && (
+                    <button
+                      onClick={() => deletePendingInvoice(inv.id || '')}
+                      className="px-4 py-2 bg-red-50 text-red-600 rounded-2xl text-sm font-black hover:bg-red-100 transition-all border border-red-100"
+                    >
+                      إلغاء الفاتورة
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -928,22 +1403,37 @@ export default function POS() {
                       <div className="relative aspect-square rounded-2xl bg-gray-50 mb-4 overflow-hidden flex items-center justify-center">
                         <img src={product.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={product.name} />
 
-                        <div className={cn(
-                          "absolute top-3 right-3 px-3 py-1.5 rounded-xl text-xs font-black border backdrop-blur-md",
-                          product.branchStock < 5 ? "bg-red-50 text-red-600 border-red-100" : "bg-green-50 text-green-600 border-green-100"
-                        )}>
-                          {product.branchStock} قطعة
-                        </div>
+                        {product.trackInventory === false ? (
+                          <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl text-xs font-black border backdrop-blur-md bg-green-50 text-green-600 border-green-100">
+                            متاح
+                          </div>
+                        ) : (
+                          <div className={cn(
+                            "absolute top-3 right-3 px-3 py-1.5 rounded-xl text-xs font-black border backdrop-blur-md",
+                            product.branchStock === 0 ? "bg-red-50 text-red-500 border-red-200" :
+                            product.branchStock < 5 ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-green-50 text-green-600 border-green-100"
+                          )}>
+                            {product.branchStock === 0 ? "نفذ المخزن" : `${product.branchStock} قطعة`}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="mb-4 text-right">
-                        <div className={cn(
-                          "inline-flex items-center gap-2 rounded-2xl px-3 py-2 bg-gray-50 text-gray-500 text-xs font-black uppercase tracking-widest",
-                          product.branchStock < 5 ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
-                        )}>
-                          <Package className="w-4 h-4" />
-                          {product.branchStock} قطعة
-                        </div>
+                        {product.trackInventory === false ? (
+                          <div className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 bg-green-50 text-green-600 text-xs font-black uppercase tracking-widest border border-green-100">
+                            <Package className="w-4 h-4" />
+                            متاح
+                          </div>
+                        ) : (
+                          <div className={cn(
+                            "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-widest border",
+                            product.branchStock === 0 ? "bg-red-50 text-red-500 border-red-200" :
+                            product.branchStock < 5 ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-green-50 text-green-600 border-green-100"
+                          )}>
+                            <Package className="w-4 h-4" />
+                            {product.branchStock === 0 ? "نفذ المخزن" : `${product.branchStock} قطعة`}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1091,7 +1581,8 @@ export default function POS() {
                             <td className="px-6 py-4 font-mono text-gray-400 text-xs">{new Date(req.createdAt).toLocaleString('ar-EG')}</td>
                             <td className="px-6 py-4">
                                {displayStatus === 'PENDING' && <span className="bg-amber-50 text-amber-600 px-3 py-1 rounded-lg font-black text-xs">قيد الانتظار</span>}
-                               {displayStatus === 'COMPLETED' && <span className="bg-green-50 text-green-600 px-3 py-1 rounded-lg font-black text-xs">تمت الموافقة</span>}
+                               {displayStatus === 'SHIPPED' && <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-black text-xs">قيد النقل</span>}
+                               {displayStatus === 'COMPLETED' && <span className="bg-green-50 text-green-600 px-3 py-1 rounded-lg font-black text-xs">تمت الموافقة والاستلام</span>}
                                {displayStatus === 'CANCELLED' && <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg font-black text-xs">ملغي / مرفوض</span>}
                             </td>
                             <td className="px-6 py-4">
@@ -1099,7 +1590,7 @@ export default function POS() {
                                  <div className="flex items-center gap-2">
                                    <button 
                                       onClick={async () => {
-                                        const newQty = prompt('أدخل الكمية الجديدة:', productInfo?.quantity);
+                                        const newQty = prompt('أدخل الكمية الجديدة:', productInfo?.quantity ? String(productInfo.quantity) : '');
                                         if(newQty && !isNaN(Number(newQty)) && Number(newQty) > 0) {
                                           try {
                                             const cancelTx = {
@@ -1219,7 +1710,7 @@ export default function POS() {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -20 }}
-                      key={item.productId}
+                      key={item.sku || item.productId}
                       className="group bg-white p-5 rounded-3xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md"
                     >
                       <div className="flex justify-between items-start mb-4">
@@ -1227,14 +1718,24 @@ export default function POS() {
                           <h5 className="text-sm font-black text-gray-900 mb-1">{item.name}</h5>
                           <span className="text-xs font-bold text-gray-400">سعر الوحدة: {formatCurrency(item.originalPrice)}</span>
                         </div>
-                        <span className="text-lg font-black text-blue-600 font-sans tracking-tight">{formatCurrency(item.total)}</span>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="text-lg font-black text-blue-600 font-sans tracking-tight">{formatCurrency(item.total)}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFromCart(item.sku || item.productId)}
+                            className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                            title="حذف من السلة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center bg-gray-50 rounded-2xl p-1 shadow-inner">
-                          <button onClick={() => updateQuantity(item.productId, -1)} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-white hover:text-red-500 rounded-xl transition-all shadow-sm"><Minus className="w-4 h-4" /></button>
+                          <button onClick={() => updateQuantity(item.sku || item.productId, -1)} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-white hover:text-red-500 rounded-xl transition-all shadow-sm"><Minus className="w-4 h-4" /></button>
                           <span className="w-12 text-center text-sm font-black text-gray-900 font-sans">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.productId, 1)} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-white hover:text-blue-600 rounded-xl transition-all shadow-sm"><Plus className="w-4 h-4" /></button>
+                          <button onClick={() => updateQuantity(item.sku || item.productId, 1)} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-white hover:text-blue-600 rounded-xl transition-all shadow-sm"><Plus className="w-4 h-4" /></button>
                         </div>
 
                         <div className="flex flex-col gap-1 flex-1">
@@ -1242,7 +1743,7 @@ export default function POS() {
                           <input
                             type="number"
                             value={item.discount || ''}
-                            onChange={(e) => updateDiscount(item.productId, Number(e.target.value))}
+                            onChange={(e) => updateDiscount(item.sku || item.productId, Number(e.target.value))}
                             className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-sm font-black text-blue-600 text-center focus:ring-2 focus:ring-blue-100 outline-none"
                             placeholder="0"
                           />
@@ -1255,6 +1756,157 @@ export default function POS() {
             </div>
 
             <div className="p-8 bg-gray-50 border-t border-gray-100 space-y-6">
+              
+              {/* Customer Selector */}
+              <div className="bg-white rounded-3xl p-4 border border-gray-100/80 space-y-3 relative z-20" ref={customerDropdownRef}>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">العميل</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsNewCustomerModalOpen(true)}
+                    className="text-xs font-black text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer focus:outline-none"
+                  >
+                    + عميل جديد
+                  </button>
+                </div>
+                
+                <div className="relative">
+                  <div className="relative">
+                    <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="بحث بالاسم أو رقم الهاتف..."
+                      value={selectedCustomer ? `${selectedCustomer.name} (${selectedCustomer.phone})` : customerSearchTerm}
+                      onFocus={() => {
+                        setShowCustomerDropdown(true);
+                        if (selectedCustomer) {
+                          setCustomerSearchTerm('');
+                          setSelectedCustomer(null);
+                        }
+                      }}
+                      onChange={(e) => {
+                        setCustomerSearchTerm(e.target.value);
+                        setShowCustomerDropdown(true);
+                        setSelectedCustomer(null);
+                      }}
+                      className="w-full bg-slate-50 border-none rounded-2xl pr-10 pl-4 py-3 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
+                    />
+                    {selectedCustomer && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setCustomerSearchTerm('');
+                        }}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Customer Dropdown */}
+                  <AnimatePresence>
+                    {showCustomerDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-2 bg-white rounded-2xl border border-slate-100 shadow-2xl max-h-56 overflow-y-auto scrollbar-thin text-right"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null);
+                            setCustomerSearchTerm('');
+                            setShowCustomerDropdown(false);
+                          }}
+                          className="w-full text-right p-3 hover:bg-slate-50 border-b border-slate-50 transition-colors flex items-center justify-between text-xs font-black text-slate-500"
+                        >
+                          <span>عميل نقدي / سفري (سريع)</span>
+                          <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-400 font-bold">افتراضي</span>
+                        </button>
+                        {customers.filter(c =>
+                          c.branchId === selectedBranchId && (
+                            c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                            c.phone.includes(customerSearchTerm)
+                          )
+                        ).length === 0 ? (
+                          <div className="p-3 text-center text-xs text-gray-400 font-bold">لا يوجد نتائج مطابقة</div>
+                        ) : (
+                          customers.filter(c =>
+                            c.branchId === selectedBranchId && (
+                              c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                              c.phone.includes(customerSearchTerm)
+                            )
+                          ).map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer(c);
+                                setCustomerSearchTerm(`${c.name} (${c.phone})`);
+                                setShowCustomerDropdown(false);
+                              }}
+                              className="w-full text-right p-3 hover:bg-blue-50/50 border-b border-slate-50 transition-colors flex items-center justify-between gap-2"
+                            >
+                              <div className="text-right">
+                                <p className="text-xs font-black text-slate-800">{c.name}</p>
+                                <p className="text-[9px] text-gray-400 font-bold mt-0.5">{c.phone}</p>
+                              </div>
+                              <div className="text-left shrink-0">
+                                {c.balance > 0 ? (
+                                  <span className={cn(
+                                    "text-[9px] px-2 py-0.5 rounded font-black border",
+                                    c.balanceType === 'credit' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
+                                  )}>
+                                    {formatCurrency(c.balance)} {c.balanceType === 'credit' ? 'دائن' : 'مدين'}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-slate-400 font-bold">رصيد: 0.00</span>
+                                )}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Selected Customer Stats & Action */}
+                {selectedCustomer && (
+                  <div className="flex items-center justify-between bg-slate-50/60 p-3 rounded-2xl border border-slate-100/50">
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400 font-bold leading-none mb-1">الرصيد المالي الحالي</p>
+                      <p className={cn(
+                        "text-xs font-black",
+                        selectedCustomer.balance === 0
+                          ? "text-slate-500"
+                          : selectedCustomer.balanceType === 'credit'
+                          ? "text-emerald-600"
+                          : "text-rose-600"
+                      )}>
+                        {selectedCustomer.balance > 0
+                          ? `${formatCurrency(selectedCustomer.balance)} ${selectedCustomer.balanceType === 'credit' ? 'دائن (له)' : 'مدين (عليه)'}`
+                          : '0.00 ج.م'
+                        }
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem('default_pos_customer_id', selectedCustomer.id);
+                        alert(`تم تعيين العميل "${selectedCustomer.name}" كعميل افتراضي للبيعات بنجاح.`);
+                      }}
+                      className="px-3 py-1.5 bg-white text-slate-600 font-black border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-[10px] cursor-pointer focus:outline-none"
+                    >
+                      تعيين كافتراضي
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-3">
                 <div className="flex justify-between text-sm font-black text-gray-400 uppercase tracking-widest px-1">
                   <span>المجموع الفرعي</span>
@@ -1282,30 +1934,54 @@ export default function POS() {
                 />
 
                 {editingPendingInvoiceId && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button
                       type="button"
                       onClick={() => setPendingPaymentMethod('cash')}
                       className={cn(
-                        "w-full py-4 rounded-[2rem] font-black text-sm transition-all border",
+                        "py-3 rounded-2xl font-black text-xs transition-all border",
                         pendingPaymentMethod === 'cash'
                           ? 'bg-blue-600 text-white border-blue-600'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                       )}
                     >
-                      نقداً
+                      كاش
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingPaymentMethod('visa')}
                       className={cn(
-                        "w-full py-4 rounded-[2rem] font-black text-sm transition-all border",
+                        "py-3 rounded-2xl font-black text-xs transition-all border",
                         pendingPaymentMethod === 'visa'
                           ? 'bg-blue-600 text-white border-blue-600'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                       )}
                     >
                       فيزا
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingPaymentMethod('vodafone')}
+                      className={cn(
+                        "py-3 rounded-2xl font-black text-xs transition-all border",
+                        pendingPaymentMethod === 'vodafone'
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      )}
+                    >
+                      فودافون كاش
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingPaymentMethod('instapay')}
+                      className={cn(
+                        "py-3 rounded-2xl font-black text-xs transition-all border",
+                        pendingPaymentMethod === 'instapay'
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      )}
+                    >
+                      انستا باي
                     </button>
                   </div>
                 )}
@@ -1370,42 +2046,96 @@ export default function POS() {
       <AnimatePresence>
         {isCheckoutOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsCheckoutOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => !isSaving && setIsCheckoutOpen(false)} />
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="relative w-full max-w-md bg-white rounded-[3rem] p-10 shadow-2xl overflow-hidden"
             >
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                  <CreditCard className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-black text-gray-900">إتمام البيع</h3>
-                  <p className="text-gray-400 text-sm font-medium">اختر وسيلة الدفع المناسبة للعميل</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 mb-8">
-                <button onClick={() => handleCheckout('cash')} className="flex items-center justify-between p-6 rounded-[2rem] border-2 border-gray-50 hover:border-blue-600 hover:bg-blue-50 transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><Banknote className="w-6 h-6" /></div>
-                    <span className="font-black text-gray-700 text-lg">دفع نقدي (كاش)</span>
+              {isSaving ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 shadow-inner animate-pulse">
+                    <Loader2 className="w-10 h-10 animate-spin" />
                   </div>
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-200 group-hover:border-blue-600 group-hover:bg-blue-600 transition-all"></div>
-                </button>
-                <button onClick={() => handleCheckout('visa')} className="flex items-center justify-between p-6 rounded-[2rem] border-2 border-gray-50 hover:border-blue-600 hover:bg-blue-50 transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><CreditCard className="w-6 h-6" /></div>
-                    <span className="font-black text-gray-700 text-lg">دفع بالبطاقة (فيزا)</span>
+                  <h3 className="text-3xl font-black text-gray-900 mb-2">تم التحصيل</h3>
+                  <p className="text-gray-500 font-bold text-lg">جاري الطباعة وتحديث البيانات...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                      <CreditCard className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-gray-900">إتمام البيع</h3>
+                      <p className="text-gray-400 text-sm font-medium">اختر وسيلة الدفع المناسبة للعميل</p>
+                    </div>
                   </div>
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-200 group-hover:border-blue-600 group-hover:bg-blue-600 transition-all"></div>
-                </button>
-              </div>
 
-              <div className="pt-8 border-t border-gray-100 flex justify-between items-center">
-                <span className="text-sm font-black text-gray-400 uppercase tracking-widest">إجمالي المبلغ المطلوب</span>
-                <span className="text-3xl font-black text-blue-600 font-sans tracking-tighter">{formatCurrency(total)}</span>
-              </div>
+                  <div className="grid grid-cols-2 gap-3 mb-8">
+                    <button
+                      disabled={isSaving}
+                      onClick={() => handleCheckout('cash')}
+                      className="flex flex-col items-center justify-center p-5 rounded-[2rem] border-2 border-gray-50 hover:border-emerald-600 hover:bg-emerald-50 transition-all group disabled:opacity-50 text-center"
+                    >
+                      <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <Banknote className="w-6 h-6" />
+                      </div>
+                      <span className="font-black text-gray-800 text-sm">نقدي (كاش)</span>
+                    </button>
+
+                    <button
+                      disabled={isSaving}
+                      onClick={() => handleCheckout('visa')}
+                      className="flex flex-col items-center justify-center p-5 rounded-[2rem] border-2 border-gray-50 hover:border-blue-600 hover:bg-blue-50 transition-all group disabled:opacity-50 text-center"
+                    >
+                      <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <CreditCard className="w-6 h-6" />
+                      </div>
+                      <span className="font-black text-gray-800 text-sm">بطاقة (فيزا)</span>
+                    </button>
+
+                    <button
+                      disabled={isSaving}
+                      onClick={() => handleCheckout('vodafone')}
+                      className="flex flex-col items-center justify-center p-5 rounded-[2rem] border-2 border-gray-50 hover:border-red-600 hover:bg-red-50 transition-all group disabled:opacity-50 text-center"
+                    >
+                      <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <Smartphone className="w-6 h-6" />
+                      </div>
+                      <span className="font-black text-gray-800 text-sm">فودافون كاش</span>
+                    </button>
+
+                    <button
+                      disabled={isSaving}
+                      onClick={() => handleCheckout('instapay')}
+                      className="flex flex-col items-center justify-center p-5 rounded-[2rem] border-2 border-gray-50 hover:border-pink-600 hover:bg-pink-50 transition-all group disabled:opacity-50 text-center"
+                    >
+                      <div className="w-12 h-12 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <QrCode className="w-6 h-6" />
+                      </div>
+                      <span className="font-black text-gray-800 text-sm">انستا باي</span>
+                    </button>
+
+                    {selectedCustomer && selectedCustomer.id !== 'WALK-IN' && (
+                      <button
+                        disabled={isSaving}
+                        onClick={() => handleCheckout('debt')}
+                        className="col-span-2 flex items-center justify-center gap-4 p-5 rounded-[2rem] border-2 border-gray-50 hover:border-rose-600 hover:bg-rose-50 transition-all group disabled:opacity-50 text-center"
+                      >
+                        <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Wallet className="w-5 h-5" />
+                        </div>
+                        <span className="font-black text-gray-800 text-sm">بيع آجل (على الحساب)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-8 border-t border-gray-100 flex justify-between items-center">
+                    <span className="text-sm font-black text-gray-400 uppercase tracking-widest">إجمالي المبلغ المطلوب</span>
+                    <span className="text-3xl font-black text-blue-600 font-sans tracking-tighter">{formatCurrency(total)}</span>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
@@ -1462,19 +2192,19 @@ export default function POS() {
         )}
 
         {selectedDetail && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setSelectedDetail(null)} />
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-2xl bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" dir="rtl"
             >
-              <div className="p-10 border-b border-gray-50 flex items-center justify-between">
+              <div className="p-8 border-b border-gray-50 flex items-center justify-between">
                 <div className="flex items-center gap-5">
                   <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
                     <Package className="w-7 h-7" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900">تفاصيل العملية</h3>
+                    <h3 className="text-xl font-black text-gray-900">تفاصيل العملية</h3>
                     <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">{selectedDetail.id}</p>
                   </div>
                 </div>
@@ -1483,59 +2213,298 @@ export default function POS() {
                 </button>
               </div>
 
-              <div className="p-10 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-6 mb-10">
-                  <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-inner">
-                    <span className="text-xs font-black text-gray-400 uppercase block mb-2 tracking-widest text-center">حالة العملية</span>
-                    <span className="text-lg font-black text-blue-600 block text-center">
-                      {selectedDetail.status === 'COMPLETED' ? 'مكتملة'
+              <div className="p-8 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                  <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 shadow-inner flex flex-col items-center justify-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">حالة العملية</span>
+                    <span className={cn(
+                      "text-base font-black block text-center",
+                      selectedDetail.status === 'COMPLETED' ? 'text-green-600' :
+                      selectedDetail.status === 'RETURNED' ? 'text-red-500' :
+                      selectedDetail.status === 'PENDING' ? 'text-amber-500' : 'text-slate-600'
+                    )}>
+                      {selectedDetail.status === 'COMPLETED' ? '✓ مكتملة'
                         : selectedDetail.status === 'PENDING' ? 'معلقة'
-                        : selectedDetail.status === 'RETURNED' ? 'مرتجع'
-                        : selectedDetail.status === 'CANCELLED' ? 'ملغاة'
+                        : selectedDetail.status === 'RETURNED' ? '↺ مرتجع'
+                        : selectedDetail.status === 'CANCELLED' ? '✕ ملغاة'
                         : selectedDetail.status || 'غير محددة'}
                     </span>
                   </div>
-                  <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-inner">
-                    <span className="text-xs font-black text-gray-400 uppercase block mb-2 tracking-widest text-center">توقيت العملية</span>
-                    <span className="text-sm font-black text-gray-900 font-sans tracking-tight block text-center">{new Date(selectedDetail.createdAt).toLocaleString('ar-EG')}</span>
+                  <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 shadow-inner flex flex-col items-center justify-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">توقيت العملية</span>
+                    <span className="text-xs font-black text-slate-800 font-sans tracking-tight block text-center">{new Date(selectedDetail.createdAt).toLocaleString('ar-EG')}</span>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 shadow-inner flex flex-col items-center justify-center overflow-hidden">
+                    <span className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">باركود الفاتورة</span>
+                    <div className="flex justify-center items-center w-full max-h-[35px]">
+                      <svg id="invoice-barcode-svg" className="max-w-full h-auto"></svg>
+                    </div>
                   </div>
                 </div>
 
-                <h5 className="font-black text-gray-900 mb-6 flex items-center gap-3">
-                  <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                  الأصناف والمحتويات
-                </h5>
-                <div className="space-y-4">
-                  {(selectedDetail.items || selectedDetail.products || []).map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center p-6 bg-white rounded-3xl border border-gray-100 shadow-sm hover:border-blue-100 transition-all">
-                      <div className="space-y-1">
-                        <p className="font-black text-gray-900">{item.name || item.productName}</p>
-                        <p className="text-sm text-gray-400 font-bold">
-                          الكمية: <span className="text-gray-900 font-sans">{item.quantity}</span> |
-                          السعر: <span className="text-gray-900 font-sans">{formatCurrency(item.price || 0)}</span>
-                        </p>
-                      </div>
-                      <span className="text-xl font-black text-blue-600 font-sans tracking-tighter">{formatCurrency((item.price || 0) * (item.quantity || 0))}</span>
-                    </div>
-                  ))}
-                </div>
+                {showReturnPanel ? (
+                  <div className="space-y-4 border-2 border-red-100 p-5 rounded-[2rem] bg-red-50/20">
+                    <h5 className="font-black text-red-600 mb-2 flex items-center gap-3">
+                      <div className="w-1.5 h-6 bg-red-600 rounded-full"></div>
+                      تحديد الأصناف المراد إرجاعها
+                    </h5>
+                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                      {(selectedDetail.items || []).map((item: any, idx: number) => {
+                        const maxReturn = (item.quantity || 0) - (item.returnedQuantity || 0);
+                        const isChecked = returnQuantities[idx] !== undefined;
+                        const returnQty = returnQuantities[idx] || 0;
 
-                <div className="mt-10 pt-10 border-t border-gray-100 flex justify-between items-center">
-                  <div className="space-y-1">
+                        return (
+                          <div key={idx} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-gray-100 shadow-sm" dir="rtl">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                disabled={maxReturn <= 0}
+                                checked={isChecked && maxReturn > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setReturnQuantities(prev => ({ ...prev, [idx]: 1 }));
+                                  } else {
+                                    setReturnQuantities(prev => {
+                                      const next = { ...prev };
+                                      delete next[idx];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="w-5 h-5 text-red-600 rounded border-gray-300 focus:ring-red-100 cursor-pointer disabled:opacity-40"
+                              />
+                              <div className="text-right">
+                                <p className="font-black text-sm text-gray-900">{item.name}</p>
+                                <p className="text-xs text-gray-400 font-bold">
+                                  المباع: <span className="font-sans text-gray-900">{item.quantity}</span> 
+                                  {item.returnedQuantity > 0 && (
+                                    <> | تم إرجاع: <span className="font-sans text-red-500 font-black">{item.returnedQuantity}</span></>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            {isChecked && maxReturn > 0 ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setReturnQuantities(prev => ({ ...prev, [idx]: Math.max(1, returnQty - 1) }))}
+                                  className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100 border border-gray-200 active:scale-95"
+                                >
+                                  <Minus className="w-3.5 h-3.5 text-gray-500" />
+                                </button>
+                                <span className="text-base font-black font-sans w-6 text-center">{returnQty}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReturnQuantities(prev => ({ ...prev, [idx]: Math.min(maxReturn, returnQty + 1) }))}
+                                  className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100 border border-gray-200 active:scale-95"
+                                >
+                                  <Plus className="w-3.5 h-3.5 text-gray-500" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-gray-400">
+                                {maxReturn <= 0 ? 'مسترجع بالكامل' : 'غير محدد'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    <div className="flex gap-3 pt-3 border-t border-gray-100 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allReturn: Record<string | number, number> = {};
+                          (selectedDetail.items || []).forEach((item: any, idx: number) => {
+                            const maxReturn = (item.quantity || 0) - (item.returnedQuantity || 0);
+                            if (maxReturn > 0) {
+                              allReturn[idx] = maxReturn;
+                            }
+                          });
+                          setReturnQuantities(allReturn);
+                        }}
+                        className="text-xs font-black text-red-600 hover:text-red-700 bg-red-50/60 px-3 py-2 rounded-xl border border-red-100 transition-all active:scale-[0.98] cursor-pointer"
+                      >
+                        تحديد كل المتبقي
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReturnQuantities({})}
+                        className="text-xs font-black text-gray-500 hover:text-gray-600 bg-gray-100 px-3 py-2 rounded-xl border border-gray-200 transition-all active:scale-[0.98] cursor-pointer"
+                      >
+                        إلغاء التحديد
+                      </button>
+                    </div>
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setShowReturnPanel(false)}
+                        className="flex-1 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-200 transition-all cursor-pointer text-center text-sm"
+                      >
+                        تراجع
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Object.keys(returnQuantities).length === 0}
+                        onClick={async () => {
+                          if (window.confirm('هل أنت متأكد من إرجاع البنود والكميات المحددة للمخزون؟')) {
+                            try {
+                              let returnedSubtotal = 0;
+                              const updatedItems = selectedDetail.items.map((item: any, idx: number) => {
+                                const retQty = returnQuantities[idx] || 0;
+                                if (retQty > 0) {
+                                  const newRetQty = (item.returnedQuantity || 0) + retQty;
+                                  returnedSubtotal += retQty * (item.price || 0);
+                                  return { ...item, returnedQuantity: newRetQty };
+                                }
+                                return item;
+                              });
+
+                              const ratio = selectedDetail.subtotal > 0 ? (selectedDetail.tax / selectedDetail.subtotal) : 0;
+                              const returnedTax = returnedSubtotal * ratio;
+                              const returnedTotal = returnedSubtotal + returnedTax;
+
+                              const newSubtotal = Math.max(0, selectedDetail.subtotal - returnedSubtotal);
+                              const newTax = Math.max(0, selectedDetail.tax - returnedTax);
+                              const newTotal = Math.max(0, selectedDetail.total - returnedTotal);
+
+                              const isFullyReturned = updatedItems.every((item: any) => (item.quantity || 0) === (item.returnedQuantity || 0));
+                              const newStatus = isFullyReturned ? 'RETURNED' : 'PARTIALLY_RETURNED';
+
+                              const updates = {
+                                items: updatedItems,
+                                subtotal: newSubtotal,
+                                tax: newTax,
+                                total: newTotal,
+                                status: newStatus as any
+                              };
+
+                              await updateInvoice(selectedDetail.id, updates);
+                              setSelectedDetail({ ...selectedDetail, ...updates });
+                              setIsSuccess(true);
+                              setShowReturnPanel(false);
+                              setTimeout(() => setIsSuccess(false), 3000);
+                            } catch (err) {
+                              console.error("Error making partial return:", err);
+                              alert("حدث خطأ أثناء معالجة المرتجع الجزئي.");
+                            }
+                          }
+                        }}
+                        className="flex-[2] bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-red-700 transition-all disabled:opacity-40 disabled:pointer-events-none text-sm cursor-pointer shadow-lg shadow-red-200"
+                      >
+                        تأكيد إرجاع البنود المحددة
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h5 className="font-black text-gray-900 mb-4 flex items-center gap-3">
+                      <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                      الأصناف والمحتويات
+                    </h5>
+                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                      {(selectedDetail.items || selectedDetail.products || []).map((item: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-blue-100 transition-all">
+                          <div className="space-y-1 text-right">
+                            <p className="font-black text-sm text-gray-900">{item.name || item.productName}</p>
+                            <p className="text-xs text-gray-400 font-bold">
+                              الكمية: <span className="text-gray-900 font-sans font-black">{item.quantity}</span> 
+                              {item.returnedQuantity > 0 && (
+                                <> | المرتجع: <span className="text-red-500 font-black">{item.returnedQuantity}</span></>
+                              )} | 
+                              السعر: <span className="text-gray-900 font-sans">{formatCurrency(item.price || 0)}</span>
+                            </p>
+                          </div>
+                          <span className="text-lg font-black text-blue-600 font-sans tracking-tighter">{formatCurrency((item.price || 0) * ((item.quantity || 0) - (item.returnedQuantity || 0)))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div className="mt-8 pt-8 border-t border-gray-100 flex justify-between items-center">
+                  <div className="space-y-1 text-right">
                     <span className="text-sm font-black text-gray-400 uppercase tracking-widest">إجمالي الفاتورة النهائي</span>
-                    <p className="text-4xl font-black text-gray-900 font-sans tracking-tighter">{formatCurrency(selectedDetail.total || 0)}</p>
+                    <p className="text-3xl font-black text-gray-900 font-sans tracking-tighter">{formatCurrency(selectedDetail.total || 0)}</p>
                   </div>
                   {selectedDetail.notes && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-3xl p-5 shadow-inner mb-4">
-                      <span className="text-xs font-black text-gray-400 uppercase tracking-widest">ملاحظة الفاتورة</span>
-                      <p className="mt-2 text-sm font-bold text-gray-700">{selectedDetail.notes}</p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 shadow-inner mb-4">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">ملاحظة الفاتورة</span>
+                      <p className="mt-1 text-sm font-bold text-slate-700">{selectedDetail.notes}</p>
                     </div>
                   )}
                   {selectedDetail.paymentMethod && (
-                    <div className="bg-blue-600 text-white px-8 py-4 rounded-3xl shadow-xl shadow-blue-100 flex flex-col items-center">
-                      <span className="text-xs font-black text-blue-100 uppercase mb-1 tracking-widest">وسيلة الدفع</span>
-                      <span className="font-black text-lg">{selectedDetail.paymentMethod === 'cash' ? 'نقداً (كاش)' : 'بطاقة (فيزا)'}</span>
+                    <div className="bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-xl shadow-blue-100 flex flex-col items-center">
+                      <span className="text-[10px] font-black text-blue-100 uppercase mb-1 tracking-widest">وسيلة الدفع</span>
+                      <span className="font-black text-base">
+                        {selectedDetail.paymentMethod === 'cash' ? 'نقداً (كاش)' : 
+                         selectedDetail.paymentMethod === 'visa' ? 'بطاقة (فيزا)' : 
+                         selectedDetail.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
+                         selectedDetail.paymentMethod === 'instapay' ? 'انستا باي' : 
+                         'آجل (على الحساب)'}
+                      </span>
                     </div>
+                  )}
+                </div>
+
+                <div className="mt-6 pt-5 border-t border-slate-100 flex flex-wrap gap-3 items-center justify-end">
+                  {/* Print receipt button */}
+                  <button
+                    type="button"
+                    onClick={() => handlePrintReceipt(selectedDetail)}
+                    className="px-6 py-3 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-500/10 active:scale-95 cursor-pointer text-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                      <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                      <rect x="6" y="14" width="12" height="8" rx="1" />
+                    </svg>
+                    طباعة الفاتورة
+                  </button>
+
+                  {/* WhatsApp button */}
+                  {(() => {
+                    const detailCustomer = customers.find(c => c.id === selectedDetail.customerId);
+                    if (detailCustomer && detailCustomer.phone) {
+                      return (
+                        <a
+                          href={getWhatsAppUrl(detailCustomer.phone, selectedDetail)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/10 active:scale-95 cursor-pointer text-sm"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="w-4 h-4" viewBox="0 0 16 16">
+                            <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.949h.004c4.368 0 7.927-3.561 7.928-7.927a7.89 7.89 0 0 0-2.325-5.596l-.001-.005zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.625-4.899c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
+                          </svg>
+                          إرسال WhatsApp
+                        </a>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Return invoice button - only for completed or partially returned invoices */}
+                  {(selectedDetail.status === 'COMPLETED' || selectedDetail.status === 'PARTIALLY_RETURNED') && (user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_make_return) && !showReturnPanel && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const canReturn = user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_make_return;
+                        if (!canReturn) {
+                          alert('عذراً، ليس لديك صلاحية عمل مرتجع لهذه الفاتورة.');
+                          return;
+                        }
+                        setShowReturnPanel(true);
+                      }}
+                      className="px-6 py-3 bg-red-50 text-red-600 font-black rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center gap-2 border border-red-100 active:scale-95 cursor-pointer text-sm"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                      </svg>
+                      إرجاع الفاتورة (مرتجع)
+                    </button>
                   )}
                 </div>
               </div>
@@ -1728,19 +2697,12 @@ export default function POS() {
                          <button
                            onClick={async () => {
                              try {
-                               const newTx = {
-                                 id: `BR-FULFILL-${Date.now().toString(36).toUpperCase()}`,
-                                 type: 'TRANSFER',
-                                 status: 'COMPLETED',
-                                 fromWarehouseId: req.fromWarehouseId,
-                                 toWarehouseId: req.toWarehouseId,
-                                 items: req.items,
-                                 reference: req.id,
-                                 notes: `تمت الموافقة على الطلب ${req.id}`,
-                                 createdAt: new Date().toISOString(),
-                                 createdBy: user?.uid || 'cashier',
-                               };
-                               await setDoc(doc(db, 'inventory_transactions', newTx.id), newTx);
+                               await updateDoc(doc(db, 'inventory_transactions', req.id), {
+                                 status: 'SHIPPED',
+                                 notes: `تمت الموافقة والإرسال بواسطة ${user?.name || 'الكاشير'}`,
+                                 updatedAt: new Date().toISOString(),
+                                 updatedBy: user?.uid || 'cashier'
+                               });
                                setIsSuccess(true);
                                setTimeout(() => setIsSuccess(false), 3000);
                              } catch(err: any) {
@@ -1756,19 +2718,12 @@ export default function POS() {
                            onClick={async () => {
                              if(confirm('هل أنت متأكد من رفض هذا الطلب؟')) {
                                try {
-                                 const newTx = {
-                                   id: `BR-REJECT-${Date.now().toString(36).toUpperCase()}`,
-                                   type: 'TRANSFER',
+                                 await updateDoc(doc(db, 'inventory_transactions', req.id), {
                                    status: 'CANCELLED',
-                                   fromWarehouseId: req.fromWarehouseId,
-                                   toWarehouseId: req.toWarehouseId,
-                                   items: req.items,
-                                   reference: req.id,
-                                   notes: `تم رفض الطلب ${req.id}`,
-                                   createdAt: new Date().toISOString(),
-                                   createdBy: user?.uid || 'cashier',
-                                 };
-                                 await setDoc(doc(db, 'inventory_transactions', newTx.id), newTx);
+                                   notes: `تم رفض الطلب بواسطة ${user?.name || 'الكاشير'}`,
+                                   updatedAt: new Date().toISOString(),
+                                   updatedBy: user?.uid || 'cashier'
+                                 });
                                } catch(err: any) {
                                  console.error('Error rejecting request:', err);
                                  alert('فشل في رفض الطلب: ' + (err.message || ''));
@@ -1784,6 +2739,204 @@ export default function POS() {
                    );
                  })}
                </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Quick Add Customer Modal */}
+      <AnimatePresence>
+        {isNewCustomerModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm no-print" dir="rtl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+            >
+              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="text-right">
+                  <h3 className="text-lg font-black text-slate-900">إضافة عميل جديد سريع</h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1">تجهيز حساب العميل فورياً للربط بالفاتورة الحالية</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewCustomerModalOpen(false)}
+                  className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors font-bold cursor-pointer focus:outline-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-8 space-y-4 text-right">
+                <div>
+                  <label className="text-xs font-black text-slate-400 block mb-2">اسم العميل *</label>
+                  <input
+                    type="text"
+                    id="quick-customer-name"
+                    placeholder="الاسم الكامل للعميل"
+                    className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-400 block mb-2">رقم الهاتف *</label>
+                  <input
+                    type="tel"
+                    id="quick-customer-phone"
+                    placeholder="رقم الهاتف للتواصل والبحث"
+                    className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-400 block mb-2">العنوان</label>
+                  <input
+                    type="text"
+                    id="quick-customer-address"
+                    placeholder="عنوان العميل (اختياري)"
+                    className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
+                  />
+                </div>
+                
+                <div className="flex gap-3 pt-6 border-t border-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewCustomerModalOpen(false)}
+                    className="flex-1 py-3.5 bg-slate-50 text-slate-500 font-black rounded-2xl hover:bg-slate-100 transition-all text-xs cursor-pointer focus:outline-none"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nameInput = document.getElementById('quick-customer-name') as HTMLInputElement;
+                      const phoneInput = document.getElementById('quick-customer-phone') as HTMLInputElement;
+                      const addressInput = document.getElementById('quick-customer-address') as HTMLInputElement;
+                      
+                      const cName = nameInput?.value?.trim();
+                      const cPhone = phoneInput?.value?.trim();
+                      const cAddress = addressInput?.value?.trim() || '';
+                      
+                      if (!cName || !cPhone) {
+                        alert('الرجاء إدخال اسم العميل ورقم هاتفه.');
+                        return;
+                      }
+                      
+                      try {
+                        const newCustomerRef = await addDoc(collection(db, 'customers'), {
+                          name: cName,
+                          phone: cPhone,
+                          address: cAddress,
+                          balance: 0,
+                          balanceType: 'debit',
+                          points: 0,
+                          branchId: selectedBranchId,
+                          createdAt: new Date().toISOString()
+                        });
+                        
+                        const newCust: Customer = {
+                          id: newCustomerRef.id,
+                          name: cName,
+                          phone: cPhone,
+                          address: cAddress,
+                          balance: 0,
+                          balanceType: 'debit',
+                          points: 0,
+                          branchId: selectedBranchId,
+                          createdAt: new Date().toISOString()
+                        };
+                        
+                        setSelectedCustomer(newCust);
+                        setCustomerSearchTerm(`${cName} (${cPhone})`);
+                        setIsNewCustomerModalOpen(false);
+                      } catch (err) {
+                        console.error('Quick customer add failed:', err);
+                        alert('حدث خطأ أثناء إضافة العميل سريعاً.');
+                      }
+                    }}
+                    className="flex-1 py-3.5 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all text-xs cursor-pointer focus:outline-none"
+                  >
+                    حفظ واختيار العميل
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Variant Selector Modal */}
+      <AnimatePresence>
+        {variantSelectorProduct && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm no-print" dir="rtl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            >
+              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="text-right">
+                  <h3 className="text-lg font-black text-slate-900">اختر المقاس واللون</h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1">{variantSelectorProduct.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVariantSelectorProduct(null)}
+                  className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors font-bold cursor-pointer focus:outline-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-8 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div className="grid grid-cols-1 gap-3">
+                  {variantSelectorProduct.variants?.map((v, index) => {
+                    const vStock = getVariantBranchStock(variantSelectorProduct, v);
+                    const isOutOfStock = variantSelectorProduct.trackInventory !== false && vStock <= 0;
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        disabled={isOutOfStock}
+                        onClick={() => addToCart(variantSelectorProduct, v)}
+                        className={cn(
+                          "w-full text-right p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-4",
+                          isOutOfStock
+                            ? "border-gray-50 bg-gray-50/50 opacity-50 cursor-not-allowed"
+                            : "border-gray-100 bg-white hover:border-blue-600 hover:bg-blue-50/30"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-slate-100 rounded-xl flex flex-col items-center justify-center text-slate-600 shrink-0 font-sans font-black text-sm">
+                            {v.size || '-'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-slate-800">{v.color || 'بدون لون'}</span>
+                              {v.sku && <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{v.sku}</span>}
+                            </div>
+                            <p className="text-xs font-bold text-slate-400 mt-0.5">
+                              السعر: <span className="text-blue-600 font-sans">{formatCurrency(v.price || variantSelectorProduct.sellingPrice)}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-left shrink-0">
+                          {isOutOfStock ? (
+                            <span className="text-xs font-black text-rose-500 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
+                              نفذ المخزن
+                            </span>
+                          ) : (
+                            <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                              متوفر: {vStock} قطعة
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

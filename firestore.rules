@@ -96,7 +96,10 @@ service cloud.firestore {
         return isSignedIn() && userData.branchId == resource.data.branchId;
       }
 
-      allow read: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isSameBranch() || isAdmin());
+      // Allow single-document read if it belongs to user or same branch
+      allow get: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isSameBranch() || isAdmin());
+      // Allow listing for admin always; cashiers can list (client-side filtering handles branch scope)
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming());
       allow update: if isAdmin() || (
         isSignedIn() &&
@@ -139,7 +142,7 @@ service cloud.firestore {
 
     // INVENTORY TRANSACTIONS
     match /inventory_transactions/{txId} {
-      allow read: if isSignedIn();
+      allow get, list: if isSignedIn();
       allow create: if isSignedIn() && incoming().createdBy == request.auth.uid;
       allow update: if isSignedIn();
       allow delete: if isAdmin();
@@ -170,5 +173,66 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isSuperAdminSession();
     }
+
+    // --- SUPPLIERS ---
+    match /suppliers/{supplierId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // --- PURCHASE RECEIPTS (فواتير التوريد) ---
+    match /purchase_receipts/{receiptId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // --- PURCHASE PAYMENTS (دفعات الموردين) ---
+    match /purchase_payments/{paymentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // --- ADDITIONAL COLLECTIONS ---
+    match /stock_levels/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /stock_takings/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /branches/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /transfers/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /accounts_payable/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /opening_balance/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+
+    // --- ADDITIONAL APP COLLECTIONS (previously missing = default deny) ---
+    match /currencies/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /check_stages/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /taxes/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /cash_transactions/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /reports/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // --- PRODUCT UNITS (وحدات القياس) ---
+    match /product_units/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // --- ITEM MAPS (خريطة الأصناف) ---
+    match /item_maps/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // --- ACCOUNTING JOURNALS (previously missing = default deny) ---
+    match /journal/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /journalEntries/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /journal_vouchers/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+
+    // --- PURCHASE RECEIPTS & PAYMENTS (full reset support) ---
+    match /purchase_receipts/{id} { allow read: if isSignedIn(); allow create, update: if isSignedIn(); allow delete: if isAdmin(); }
+    match /purchase_payments/{id} { allow read: if isSignedIn(); allow create, update: if isSignedIn(); allow delete: if isAdmin(); }
+    match /suppliers/{id} { allow read: if isSignedIn(); allow create, update: if isSignedIn(); allow delete: if isAdmin(); }
+
+    // --- TRANSFER RECEIPTS (استلام تحويل بضاعة) ---
+    match /transfer_receipts/{id} { allow read: if isSignedIn(); allow create, update: if isSignedIn(); allow delete: if isAdmin(); }
+
+    // --- ACTIVITY LOGS (سجل النشاط والتدقيق) ---
+    match /activity_logs/{id} { allow read, create: if isSignedIn(); allow update, delete: if isAdmin(); }
   }
 }

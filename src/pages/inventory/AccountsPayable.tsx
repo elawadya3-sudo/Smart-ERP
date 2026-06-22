@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Wallet, Search, Filter, Calendar, Building2, Plus, X,
   Loader2, CheckCircle2, AlertCircle, FileText, Banknote,
-  Clock, TrendingDown, Eye
+  Clock, TrendingDown, Eye, ChevronDown
 } from 'lucide-react';
-import { collection, query, getDocs, addDoc, updateDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, updateDoc, doc, orderBy, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
+import { useRecordNavigatorStore } from '../../store/recordNavigatorStore';
 
 interface Supplier {
   id: string;
@@ -42,6 +43,8 @@ export default function AccountsPayable() {
   const [payAmount, setPayAmount] = useState('');
   const [paying, setPaying] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  const recordNav = useRecordNavigatorStore();
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -70,6 +73,31 @@ export default function AccountsPayable() {
     return true;
   }), [invoices, statusFilter, search]);
 
+  const selectedIndex = filtered.findIndex(inv => inv.id === expandedInvoiceId);
+  const goToInvoice = (index: number) => {
+    const target = filtered[index];
+    if (target) setExpandedInvoiceId(target.id);
+  };
+
+  useEffect(() => {
+    if (expandedInvoiceId) {
+      recordNav.register({
+        currentIndex: selectedIndex >= 0 ? selectedIndex : 0,
+        total: filtered.length,
+        label: 'الفاتورة الحالية',
+        onFirst: () => goToInvoice(0),
+        onPrevious: () => goToInvoice(Math.max(0, selectedIndex - 1)),
+        onNext: () => goToInvoice(Math.min(filtered.length - 1, selectedIndex + 1)),
+        onLast: () => goToInvoice(filtered.length - 1)
+      });
+    } else {
+      recordNav.unregister();
+    }
+    return () => {
+      recordNav.unregister();
+    };
+  }, [expandedInvoiceId, selectedIndex, filtered.length]);
+
   const totalUnpaid = invoices
     .filter(i => i.status !== 'PAID')
     .reduce((a, i) => a + (i.amount - i.paidAmount), 0);
@@ -91,6 +119,50 @@ export default function AccountsPayable() {
         paidAmount: newPaid,
         status: newStatus,
       });
+
+      // 1. If purchaseReceiptId exists, record payment in purchase_payments and update purchase_receipts
+      const receiptId = (selected as any).purchaseReceiptId;
+      if (receiptId) {
+        // Record payment in purchase_payments
+        await addDoc(collection(db, 'purchase_payments'), {
+          receiptId,
+          amount,
+          dueDate: new Date().toISOString().split('T')[0],
+          isPaid: true,
+          paidDate: new Date().toISOString(),
+          method: 'cash',
+          notes: 'سداد من شاشة الحسابات الدائنة',
+          createdAt: serverTimestamp()
+        });
+
+        // Update purchase_receipts paidAmount and remaining
+        const receiptRef = doc(db, 'purchase_receipts', receiptId);
+        const receiptSnap = await getDoc(receiptRef);
+        if (receiptSnap.exists()) {
+          const receiptData = receiptSnap.data();
+          const rPaid = (receiptData.paidAmount || 0) + amount;
+          const rRemaining = Math.max(0, (receiptData.total || 0) - rPaid);
+          await updateDoc(receiptRef, {
+            paidAmount: rPaid,
+            remaining: rRemaining,
+            lastPaymentAt: new Date().toISOString()
+          });
+        }
+      }
+
+      // 2. Sync payment to supplier balance (decrease balance owed)
+      const supplierId = (selected as any).supplierId;
+      if (supplierId) {
+        const suppRef = doc(db, 'suppliers', supplierId);
+        const suppSnap = await getDoc(suppRef);
+        if (suppSnap.exists()) {
+          const currentBalance = suppSnap.data().balance || 0;
+          await updateDoc(suppRef, {
+            balance: Math.max(0, currentBalance - amount)
+          });
+        }
+      }
+
       await fetchInvoices();
       setShowPayModal(false);
       setPayAmount('');
@@ -186,6 +258,7 @@ export default function AccountsPayable() {
           <table className="w-full text-right">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
+                <th className="px-6 py-4 w-8"></th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">المورد / المرجع</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">تاريخ الاستحقاق</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">المبلغ الكلي</th>
@@ -198,7 +271,7 @@ export default function AccountsPayable() {
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-20">
+                  <td colSpan={8} className="text-center py-20">
                     <div className="flex flex-col items-center gap-3 text-gray-300">
                       <Wallet className="w-14 h-14 opacity-30" />
                       <p className="font-bold text-lg">لا توجد فواتير موردين</p>
@@ -210,43 +283,77 @@ export default function AccountsPayable() {
                 const remaining = inv.amount - inv.paidAmount;
                 const isOverdue = inv.status !== 'PAID' && new Date(inv.dueDate) < new Date();
                 return (
-                  <motion.tr key={inv.id}
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02 }}
-                    className="hover:bg-gray-50/50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-gray-900">{inv.supplierName}</p>
-                      <p className="text-xs text-gray-400 font-mono">{inv.reference}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className={cn('flex items-center gap-1 text-sm font-bold',
-                        isOverdue ? 'text-red-500' : 'text-gray-500')}>
-                        {isOverdue && <AlertCircle className="w-4 h-4" />}
-                        <Clock className="w-3 h-3" />
-                        {formatDate(inv.dueDate)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(inv.amount)}</td>
-                    <td className="px-6 py-4 font-bold text-green-600">{formatCurrency(inv.paidAmount)}</td>
-                    <td className="px-6 py-4 font-black text-red-500">{formatCurrency(remaining)}</td>
-                    <td className="px-6 py-4">
-                      <span className={cn('px-3 py-1 rounded-full text-xs font-black',
-                        inv.status === 'PAID' ? 'bg-green-50 text-green-600' :
-                        inv.status === 'PARTIAL' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-500')}>
-                        {inv.status === 'PAID' ? 'مدفوعة' : inv.status === 'PARTIAL' ? 'دفع جزئي' : 'غير مدفوعة'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {inv.status !== 'PAID' && (
-                        <button
-                          onClick={() => { setSelected(inv); setShowPayModal(true); }}
-                          className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-sm"
-                        >
-                          <Banknote className="w-3 h-3" /> سداد
-                        </button>
+                  <React.Fragment key={inv.id}>
+                    <motion.tr
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02 }}
+                      className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                      onClick={() => setExpandedInvoiceId(expandedInvoiceId === inv.id ? null : inv.id)}
+                    >
+                      <td className="px-4 py-4">
+                        <ChevronDown className={cn(
+                          "w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-all",
+                          expandedInvoiceId === inv.id && "rotate-180"
+                        )} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-gray-900">{inv.supplierName}</p>
+                        <p className="text-xs text-gray-400 font-mono">{inv.reference}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className={cn('flex items-center gap-1 text-sm font-bold',
+                          isOverdue ? 'text-red-500' : 'text-gray-500')}>
+                          {isOverdue && <AlertCircle className="w-4 h-4" />}
+                          <Clock className="w-3 h-3" />
+                          {formatDate(inv.dueDate)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(inv.amount)}</td>
+                      <td className="px-6 py-4 font-bold text-green-600">{formatCurrency(inv.paidAmount)}</td>
+                      <td className="px-6 py-4 font-black text-red-500">{formatCurrency(remaining)}</td>
+                      <td className="px-6 py-4">
+                        <span className={cn('px-3 py-1 rounded-full text-xs font-black',
+                          inv.status === 'PAID' ? 'bg-green-50 text-green-600' :
+                          inv.status === 'PARTIAL' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-500')}>
+                          {inv.status === 'PAID' ? 'مدفوعة' : inv.status === 'PARTIAL' ? 'دفع جزئي' : 'غير مدفوعة'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        {inv.status !== 'PAID' && (
+                          <button
+                            onClick={() => { setSelected(inv); setShowPayModal(true); }}
+                            className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-sm"
+                          >
+                            <Banknote className="w-3 h-3" /> سداد
+                          </button>
+                        )}
+                      </td>
+                    </motion.tr>
+                    <AnimatePresence>
+                      {expandedInvoiceId === inv.id && (
+                        <tr>
+                          <td colSpan={8} className="px-8 py-0 bg-slate-50/30">
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="py-4 px-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-slate-50/50 rounded-2xl my-2 border border-slate-100">
+                                <div>
+                                  <p className="text-gray-400 font-bold mb-1">تاريخ الإنشاء</p>
+                                  <p className="font-semibold text-gray-800">{formatDate(inv.createdAt)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-400 font-bold mb-1">ملاحظات</p>
+                                  <p className="font-semibold text-gray-800">{inv.notes || 'لا توجد ملاحظات'}</p>
+                                </div>
+                              </div>
+                            </motion.div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </motion.tr>
+                    </AnimatePresence>
+                  </React.Fragment>
                 );
               })}
             </tbody>

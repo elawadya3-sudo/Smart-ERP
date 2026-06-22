@@ -10,7 +10,9 @@ import {
   Download,
   CreditCard,
   Banknote,
-  ArrowRight
+  ArrowRight,
+  Smartphone,
+  QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
@@ -20,15 +22,21 @@ import { INITIAL_WAREHOUSES } from '../constants';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useEffect } from 'react';
+import { useRecordNavigatorStore } from '../store/recordNavigatorStore';
+import PageToolbar from '../components/ui/PageToolbar';
+import { useBranchFilter } from '../hooks/useBranchFilter';
 
 export default function SalesHistory() {
+  const restrictedBranchId = useBranchFilter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('ALL');
+  // Lock to user's branch if restricted
+  const [selectedBranch, setSelectedBranch] = useState(() => restrictedBranchId || 'ALL');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const recordNav = useRecordNavigatorStore();
 
   useEffect(() => {
     setLoading(true);
@@ -74,50 +82,72 @@ export default function SalesHistory() {
     return warehouses.find(w => String(w.id) === String(id))?.name || `فرع (${id})`;
   };
 
+  const selectedInvoiceIndex = filteredInvoices.findIndex(inv => inv.id === selectedInvoice?.id);
+  const goToInvoice = (index: number) => {
+    const target = filteredInvoices[index];
+    if (target) setSelectedInvoice(target);
+  };
+
+  useEffect(() => {
+    if (selectedInvoice) {
+      recordNav.register({
+        currentIndex: selectedInvoiceIndex >= 0 ? selectedInvoiceIndex : 0,
+        total: filteredInvoices.length,
+        label: 'الفاتورة الحالية',
+        onFirst: () => goToInvoice(0),
+        onPrevious: () => goToInvoice(Math.max(0, selectedInvoiceIndex - 1)),
+        onNext: () => goToInvoice(Math.min(filteredInvoices.length - 1, selectedInvoiceIndex + 1)),
+        onLast: () => goToInvoice(filteredInvoices.length - 1)
+      });
+    } else {
+      recordNav.unregister();
+    }
+    return () => {
+      recordNav.unregister();
+    };
+  }, [selectedInvoice, selectedInvoiceIndex, filteredInvoices.length]);
+
   return (
-    <div className="space-y-8" dir="rtl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight">سجل المبيعات</h2>
-          <p className="text-gray-500 mt-2 font-medium">بحث وتتبع فواتير البيع الصادرة من جميع الفروع</p>
-        </div>
-        
-        <div className="flex flex-wrap gap-4">
-           <div className="relative group">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder="رقم الفاتورة..."
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-4 py-3 placeholder:text-gray-300 text-sm font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm w-64"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-           </div>
-           
-           <div className="relative">
-              <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <select 
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-8 py-3 text-sm font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm appearance-none cursor-pointer"
+    <div className="space-y-6" dir="rtl">
+      <PageToolbar
+        title="سجل المبيعات"
+        subtitle="بحث وتتبع فواتير البيع الصادرة من جميع الفروع"
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="رقم الفاتورة أو الوردية..."
+        onRefresh={() => window.location.reload()}
+        onPrint={() => window.print()}
+        onExportPdf={() => {}}
+        onExportExcel={() => {}}
+      />
+
+      <div className="erp-card p-4">
+        <div className="flex flex-wrap gap-2">
+          {/* Branch selector — hidden for restricted (cashier) users */}
+          {!restrictedBranchId && (
+            <div className="relative min-w-[180px]">
+              <Building2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select
+                className="erp-input pr-10"
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
               >
                 <option value="ALL">جميع الفروع</option>
-                {branches.map(b => (
+                {branches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
-           </div>
-
-           <div className="relative">
-              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="date"
-                className="bg-white border border-gray-100 rounded-2xl pr-10 pl-4 py-3 text-sm font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm appearance-none cursor-pointer"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
-           </div>
+            </div>
+          )}
+          <div className="relative min-w-[180px]">
+            <Calendar className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="date"
+              className="erp-input pr-10"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -149,7 +179,7 @@ export default function SalesHistory() {
              </div>
              <div>
                 <p className="text-sm text-blue-100 font-bold uppercase tracking-widest leading-none mb-1">تاريخ اليوم</p>
-                <p className="text-xl font-black">{new Date().toLocaleDateString('ar-EG')}</p>
+                <p className="text-xl font-black">{new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
              </div>
          </div>
       </div>
@@ -160,18 +190,18 @@ export default function SalesHistory() {
             <table className="w-full text-right border-collapse">
                <thead>
                   <tr className="bg-gray-50/50 border-b border-gray-100">
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">رقم الفاتورة / الوردية</th>
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">الفرع</th>
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">طريقة الدفع</th>
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">إجمالي المبلغ</th>
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">التاريخ والوقت</th>
-                     <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest"></th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">رقم الفاتورة / الوردية</th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">الفرع</th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">طريقة الدفع</th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">إجمالي المبلغ</th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">التاريخ والوقت</th>
+                     <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest"></th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-gray-50">
                   {filteredInvoices.length === 0 ? (
                     <tr>
-                       <td colSpan={6} className="px-8 py-32 text-center">
+                       <td colSpan={6} className="px-6 py-32 text-center">
                           <div className="flex flex-col items-center gap-4 text-gray-300">
                              <FileText className="w-16 h-16 opacity-10" />
                              <p className="font-bold">لا يوجد فواتير مطابقة للبحث</p>
@@ -187,15 +217,15 @@ export default function SalesHistory() {
                       className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
                       onClick={() => setSelectedInvoice(inv)}
                     >
-                       <td className="px-8 py-6">
+                       <td className="px-6 py-6">
                           <div className="flex flex-col">
                              <span className="font-mono font-bold text-blue-600 text-sm">{inv.id}</span>
                              {inv.shiftId && (
-                                <span className="text-sm font-black text-gray-400 font-mono tracking-widest">{inv.shiftId}</span>
+                                 <span className="text-sm font-black text-gray-400 font-mono tracking-widest">{inv.shiftId}</span>
                              )}
                           </div>
                        </td>
-                       <td className="px-8 py-6">
+                       <td className="px-6 py-6">
                           <div className="flex items-center gap-2">
                              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
                                 <Building2 className="w-4 h-4" />
@@ -203,25 +233,32 @@ export default function SalesHistory() {
                              <span className="font-bold text-gray-700 text-sm">{getBranchName(inv.branchId || '')}</span>
                           </div>
                        </td>
-                       <td className="px-8 py-6">
+                       <td className="px-6 py-6">
                           <div className="flex items-center gap-2">
                              {inv.paymentMethod === 'visa' ? (
                                <CreditCard className="w-4 h-4 text-blue-400" />
+                             ) : inv.paymentMethod === 'vodafone' ? (
+                               <Smartphone className="w-4 h-4 text-purple-400" />
+                             ) : inv.paymentMethod === 'instapay' ? (
+                               <QrCode className="w-4 h-4 text-pink-400" />
                              ) : (
                                <Banknote className="w-4 h-4 text-green-400" />
                              )}
                              <span className="text-sm font-bold text-gray-500">
-                                {inv.paymentMethod === 'visa' ? 'بطاقة ائتمان' : 'دفع نقدي'}
+                                {inv.paymentMethod === 'visa' ? 'بطاقة ائتمان' :
+                                 inv.paymentMethod === 'vodafone' ? 'فودافون كاش' :
+                                 inv.paymentMethod === 'instapay' ? 'انستا باي' :
+                                 inv.paymentMethod === 'debt' ? 'آجل' : 'دفع نقدي'}
                              </span>
                           </div>
                        </td>
-                       <td className="px-8 py-6 font-black text-gray-900">
+                       <td className="px-6 py-6 font-black text-gray-900">
                           {formatCurrency(inv.total)}
                        </td>
-                       <td className="px-8 py-6">
+                       <td className="px-6 py-6">
                           {formatDate(inv.createdAt)}
                        </td>
-                       <td className="px-8 py-6 text-left">
+                       <td className="px-6 py-6 text-left">
                           <button className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
                              <Eye className="w-4 h-4" />
                           </button>
@@ -246,7 +283,7 @@ export default function SalesHistory() {
                initial={{ scale: 0.95, opacity: 0, y: 20 }}
                animate={{ scale: 1, opacity: 1, y: 0 }}
                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-               className="relative w-full max-w-2xl bg-white rounded-[3rem] p-12 shadow-2xl overflow-hidden"
+               className="erp-modal max-w-2xl"
             >
               <div className="flex justify-between items-start mb-10">
                  <div>
@@ -269,8 +306,21 @@ export default function SalesHistory() {
                  <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
                     <p className="text-sm font-black text-gray-400 uppercase tracking-widest leading-none mb-3">طريقة الدفع</p>
                     <div className="flex items-center gap-3">
-                       {selectedInvoice.paymentMethod === 'visa' ? <CreditCard className="w-5 h-5 text-blue-400" /> : <Banknote className="w-5 h-5 text-green-500" />}
-                       <span className="font-bold text-gray-800">{selectedInvoice.paymentMethod === 'visa' ? 'بطاقة ائتمان' : 'دفع نقدي'}</span>
+                       {selectedInvoice.paymentMethod === 'visa' ? (
+                         <CreditCard className="w-5 h-5 text-blue-400" />
+                       ) : selectedInvoice.paymentMethod === 'vodafone' ? (
+                         <Smartphone className="w-5 h-5 text-purple-500" />
+                       ) : selectedInvoice.paymentMethod === 'instapay' ? (
+                         <QrCode className="w-5 h-5 text-pink-500" />
+                       ) : (
+                         <Banknote className="w-5 h-5 text-green-500" />
+                       )}
+                       <span className="font-bold text-gray-800">
+                         {selectedInvoice.paymentMethod === 'visa' ? 'بطاقة ائتمان' :
+                          selectedInvoice.paymentMethod === 'vodafone' ? 'فودافون كاش' :
+                          selectedInvoice.paymentMethod === 'instapay' ? 'انستا باي' :
+                          selectedInvoice.paymentMethod === 'debt' ? 'آجل' : 'دفع نقدي'}
+                       </span>
                     </div>
                  </div>
               </div>

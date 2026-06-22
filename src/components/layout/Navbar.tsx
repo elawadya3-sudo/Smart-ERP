@@ -1,26 +1,111 @@
-import { Search, Bell, User as UserIcon, LogOut, Menu, Database, Package, CreditCard, RotateCcw, X, Check, Trash2 } from 'lucide-react';
+import {
+  Bell,
+  LogOut,
+  Menu,
+  Package,
+  CreditCard,
+  RotateCcw,
+  Check,
+  Search,
+  ShoppingCart,
+  Building2,
+  Users,
+  Trash2,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db } from '../../lib/firebase';
-import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import React, { useState, useEffect } from 'react';
+import { collection, query, onSnapshot, orderBy, limit, getDocs } from 'firebase/firestore';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Warehouse, AppNotification } from '../../types';
 import { useMainStoreSettings } from '../../hooks/useMainStoreSettings';
 import { notificationsService } from '../../services/firestore';
-import { cn, formatCurrency } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
   onMenuClick?: () => void;
+  onSearchClick?: () => void;
 }
 
-export default function Navbar({ onMenuClick }: NavbarProps) {
+export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
   const { user } = useAuth();
   const { settings } = useMainStoreSettings();
   const navigate = useNavigate();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Quick Search States & Refs
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Click outside search container
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleFocus = async () => {
+    setIsFocused(true);
+    if (hasFetched) return;
+    setLoading(true);
+    try {
+      const fetchColl = async (name: string, limitVal: number) => {
+        try {
+          const snap = await getDocs(query(collection(db, name), limit(limitVal)));
+          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          return [];
+        }
+      };
+      const [prod, cust, supp] = await Promise.all([
+        fetchColl('products', 1000),
+        fetchColl('customers', 1000),
+        fetchColl('suppliers', 1000),
+      ]);
+      setProducts(prod);
+      setCustomers(cust);
+      setSuppliers(supp);
+      setHasFetched(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredProducts = useMemo(() => {
+    if (searchQuery.trim() === '*') return products;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return [];
+    return products.filter(p => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || (p.barcode && String(p.barcode).includes(q)));
+  }, [products, searchQuery]);
+
+  const filteredCustomers = useMemo(() => {
+    if (searchQuery.trim() === '*') return customers;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return [];
+    return customers.filter(c => c.name?.toLowerCase().includes(q) || c.phone?.includes(q));
+  }, [customers, searchQuery]);
+
+  const filteredSuppliers = useMemo(() => {
+    if (searchQuery.trim() === '*') return suppliers;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return [];
+    return suppliers.filter(s => s.name?.toLowerCase().includes(q) || s.phone?.includes(q) || s.company?.toLowerCase().includes(q));
+  }, [suppliers, searchQuery]);
 
   useEffect(() => {
     const qW = query(collection(db, 'warehouses'));
@@ -90,166 +175,285 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-100 sticky top-0 z-40 px-4 lg:px-8 flex items-center justify-between">
-      <div className="flex items-center gap-4 flex-1 lg:w-96 lg:flex-none">
-        <button 
+    <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/85 backdrop-blur-md flex-shrink-0">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 sm:px-4 lg:px-5">
+        <button
           onClick={onMenuClick}
-          className="p-2 -mr-2 text-gray-500 hover:bg-gray-50 rounded-xl lg:hidden transition-colors"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="h-5 w-5" />
         </button>
-        <div className="relative w-full group hidden sm:block max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute right-4 top-2.5 group-focus-within:text-blue-500 transition-colors" />
-          <input 
-            type="text" 
-            placeholder="بحث عن فاتورة، منتج، أو عميل..." 
-            className="w-full bg-gray-50 border border-gray-200 rounded-full py-2 px-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-          />
-        </div>
-      </div>
 
-      <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
-        {/* Dynamic Connection Info */}
-        <div className="hidden lg:flex items-center gap-6 text-xs font-black bg-gray-50 py-2.5 px-6 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-sm shadow-green-200"></div>
-            <span className="text-gray-400 uppercase tracking-widest">متصل بـ:</span>
-            <span className="text-blue-600">
-              {settings?.storeName || 'نقطة البيع'}
-            </span>
+        {/* Brand Identity Header (ShoppingCart + Name + ERP Badge) */}
+        <div className="flex items-center gap-3.5 mr-2 flex-shrink-0 pl-4 border-l border-slate-100 h-10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/15">
+            <ShoppingCart className="h-5 w-5" />
           </div>
-          <div className="h-5 w-px bg-gray-200 mx-1" />
-          <div className="flex items-center gap-2.5">
-            <span className="text-gray-400 uppercase tracking-widest">المستودع الرئيسي:</span>
-            <span className="text-orange-600">
-              {mainWarehouse?.name || 'المستودع الرئيسي'}
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden lg:block h-8 w-px bg-gray-100" />
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="text-left hidden sm:block">
-            <p className="text-sm font-black text-gray-900 leading-none">{user?.name || 'مدير النظام'}</p>
-            <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">
-              {user?.role?.toUpperCase() === 'ADMIN' ? 'Administrator' : 'Staff'}
-            </p>
-          </div>
-          <button 
-            onClick={() => auth.signOut()}
-            className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-all group flex items-center gap-2 min-h-[44px] min-w-[44px] justify-center"
-            title="تسجيل الخروج"
-          >
-            <LogOut className="w-5 h-5" />
-            <span className="text-sm font-bold hidden lg:block">خروج</span>
-          </button>
-        </div>
-
-        <div className="relative">
-          <button 
-            onClick={() => setShowNotifications(!showNotifications)}
-            className={cn(
-              "relative p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-all min-h-[44px] min-w-[44px] flex items-center justify-center",
-              showNotifications && "bg-blue-50 text-blue-600"
-            )}
-          >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-2.5 left-2.5 w-4 h-4 bg-red-500 border-2 border-white rounded-full text-[10px] text-white flex items-center justify-center font-black animate-bounce">
-                {unreadCount}
+          <div className="min-w-0 flex flex-col justify-center text-right">
+            <h1 className="text-sm font-black text-slate-950 tracking-tight leading-none truncate">
+              {settings?.storeName || 'NEZAM PRO'}
+            </h1>
+            <div className="flex items-center mt-1">
+              <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-1 py-0.5 rounded tracking-wider uppercase leading-none font-mono">
+                ERP System
               </span>
-            )}
-          </button>
+            </div>
+          </div>
+        </div>
 
-          <AnimatePresence>
-            {showNotifications && (
-              <>
-                <motion.div 
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-40 bg-transparent"
-                  onClick={() => setShowNotifications(false)}
-                />
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute left-0 mt-4 w-96 bg-white rounded-[2rem] shadow-2xl border border-gray-100 z-50 overflow-hidden"
-                  dir="rtl"
-                >
-                  <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+        <span className="h-6 w-px bg-slate-100 hidden sm:block mr-2" />
+
+        {/* Dynamic Context Header Info */}
+        <div className="mr-2 hidden sm:flex flex-col justify-center text-right flex-shrink-0">
+          <h2 className="text-xs font-black text-slate-700 leading-none">
+            {currentBranch ? currentBranch.name : 'المستودع الرئيسي'}
+          </h2>
+          <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase">
+            {user?.role?.toUpperCase() === 'ADMIN' ? 'لوحة التحكم والتحليلات' : 'شاشة المبيعات والكاشير'}
+          </span>
+        </div>
+
+        {/* Global Search Bar (Desktop) */}
+        <div ref={searchContainerRef} className="mr-4 flex-1 max-w-md hidden md:block relative">
+          <div className="w-full flex items-center bg-slate-50/70 border border-slate-200/50 rounded-xl pr-3.5 pl-3 py-2 transition-all">
+            <Search className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={handleFocus}
+              placeholder="البحث السريع في الفواتير، الأصناف والعملاء..."
+              className="w-full bg-transparent border-none text-slate-800 outline-none text-xs font-bold placeholder-slate-400 text-right"
+            />
+          </div>
+          
+          {isFocused && (searchQuery.trim() !== '') && (
+            <div className="absolute right-0 top-full mt-2 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 max-h-[400px] overflow-y-auto" dir="rtl">
+              {loading ? (
+                <div className="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[11px] font-bold">جاري البحث في قاعدة البيانات...</span>
+                </div>
+              ) : (filteredProducts.length === 0 && filteredCustomers.length === 0 && filteredSuppliers.length === 0) ? (
+                <div className="p-8 text-center text-slate-400 text-xs font-bold">
+                  لا توجد نتائج تطابق البحث
+                </div>
+              ) : (
+                <div className="p-2 space-y-3">
+                  {filteredProducts.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-black text-gray-900">التنبيهات</h4>
-                      <p className="text-xs text-gray-400 font-bold">آخر التحديثات والعمليات</p>
-                    </div>
-                    <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        notifications.filter(n => !n.isRead).forEach(n => notificationsService.markAsRead(n.id)); 
-                      }}
-                      className="text-xs font-black text-blue-500 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      تحديد الكل كمقروء
-                    </button>
-                  </div>
-
-                  <div className="max-h-[28rem] overflow-y-auto scrollbar-none">
-                    {notifications.length === 0 ? (
-                      <div className="p-12 text-center flex flex-col items-center gap-4 text-gray-300">
-                        <Bell className="w-12 h-12 opacity-10" />
-                        <p className="font-bold text-sm">لا توجد تنبيهات حالياً</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-gray-50">
-                        {notifications.map((n) => (
+                      <div className="px-3 py-1 text-[10px] font-black text-slate-400 bg-slate-50 rounded-lg">المنتجات ({filteredProducts.length})</div>
+                      <div className="mt-1 space-y-1">
+                        {filteredProducts.slice(0, 15).map(p => (
                           <div 
-                            key={n.id} 
-                            onClick={() => handleNotificationClick(n)}
-                            className={cn(
-                              "p-5 hover:bg-gray-50 transition-colors flex gap-4 relative group cursor-pointer",
-                              !n.isRead && "bg-blue-50/30"
-                            )}
+                            key={p.id} 
+                            onClick={() => { navigate('/inventory/products'); setSearchQuery(''); setIsFocused(false); }} 
+                            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer"
                           >
-                            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0", getNotificationColor(n.type))}>
-                              {getNotificationIcon(n.type)}
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                              <Package className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0 text-right">
-                              <div className="flex justify-between items-start gap-2 mb-1">
-                                <h5 className="text-sm font-black text-gray-900 leading-tight">{n.title}</h5>
-                                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">
-                                  {n.createdAt ? (typeof n.createdAt.toDate === 'function' ? n.createdAt.toDate().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : new Date(n.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })) : 'الآن'}
-                                </span>
-                              </div>
-                              <p className="text-xs text-gray-500 font-medium line-clamp-2">{n.message}</p>
-                              {!n.isRead && (
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); notificationsService.markAsRead(n.id); }}
-                                  className="mt-2 text-[10px] font-black text-blue-600 hover:underline flex items-center gap-1"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  تحديد كمقروء
-                                </button>
-                              )}
+                              <p className="text-xs font-bold text-slate-700 truncate">{p.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">السعر: {p.sellingPrice} - SKU: {p.sku || ''}</p>
                             </div>
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  <div className="p-4 bg-gray-50 border-t border-gray-100 text-center">
-                    <button 
-                      onClick={() => setShowNotifications(false)}
-                      className="text-xs font-black text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      إغلاق القائمة
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                  {filteredCustomers.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1 text-[10px] font-black text-slate-400 bg-slate-50 rounded-lg">العملاء ({filteredCustomers.length})</div>
+                      <div className="mt-1 space-y-1">
+                        {filteredCustomers.slice(0, 15).map(c => (
+                          <div 
+                            key={c.id} 
+                            onClick={() => { navigate('/customers'); setSearchQuery(''); setIsFocused(false); }} 
+                            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                              <p className="text-xs font-bold text-slate-700 truncate">{c.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">الهاتف: {c.phone || 'بدون هاتف'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {filteredSuppliers.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1 text-[10px] font-black text-slate-400 bg-slate-50 rounded-lg">الموردين ({filteredSuppliers.length})</div>
+                      <div className="mt-1 space-y-1">
+                        {filteredSuppliers.slice(0, 15).map(s => (
+                          <div 
+                            key={s.id} 
+                            onClick={() => { navigate('/inventory/accounts-payable'); setSearchQuery(''); setIsFocused(false); }} 
+                            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
+                              <Building2 className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                              <p className="text-xs font-bold text-slate-700 truncate">{s.name || s.company}</p>
+                              <p className="text-[10px] text-slate-400 truncate">الهاتف: {s.phone || 'بدون هاتف'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mr-auto flex items-center gap-3">
+          {/* Global Search Trigger (Mobile) */}
+          <button 
+            onClick={onSearchClick}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+          >
+            <Search className="h-4.5 w-4.5" />
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className={cn(
+                'relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-200',
+                showNotifications
+                  ? 'border-blue-200 bg-blue-50 text-blue-600'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              )}
+            >
+              <Bell className="h-4.5 w-4.5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showNotifications && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setShowNotifications(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                    className="absolute left-0 mt-3 w-96 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl z-50"
+                    dir="rtl"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">التنبيهات</h4>
+                        <p className="text-xs text-slate-400">آخر التحديثات والعمليات</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            notifications.filter((n) => !n.isRead).forEach((n) => notificationsService.markAsRead(n.id));
+                          }}
+                          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          قراءة الكل
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm('هل أنت متأكد من مسح سجل التنبيهات بالكامل؟')) {
+                              await notificationsService.clearAll();
+                            }
+                          }}
+                          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          مسح السجل
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-[28rem] overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="px-6 py-12 text-center text-slate-400">لا توجد تنبيهات حالياً</div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {notifications.map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => handleNotificationClick(n)}
+                              className={cn(
+                                'group flex cursor-pointer gap-3 px-5 py-4 transition hover:bg-slate-50',
+                                !n.isRead && 'bg-blue-50/30'
+                              )}
+                            >
+                              <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', getNotificationColor(n.type))}>
+                                {getNotificationIcon(n.type)}
+                              </div>
+                              <div className="min-w-0 flex-1 text-right">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h5 className="text-sm font-bold text-slate-900">{n.title}</h5>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-slate-400">
+                                      {n.createdAt ? (typeof n.createdAt.toDate === 'function' ? n.createdAt.toDate().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : new Date(n.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })) : 'الآن'}
+                                    </span>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('هل تريد حذف هذا التنبيه؟')) {
+                                          await notificationsService.delete(n.id);
+                                        }
+                                      }}
+                                      className="opacity-60 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded-md text-red-500 hover:bg-red-50 transition-all duration-200"
+                                      title="حذف التنبيه"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="mt-1 text-sm text-slate-500">{n.message}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="hidden items-center gap-3 rounded-2xl bg-slate-50/80 border border-slate-100 px-3 py-1.5 md:flex">
+            <div className="text-left">
+              <p className="text-sm font-black text-slate-800">{user?.name || 'مدير النظام'}</p>
+              <p className="text-[10px] font-extrabold text-blue-600 tracking-wider uppercase">
+                {user?.role?.toUpperCase() === 'ADMIN' ? 'Administrator' : 'Staff'}
+              </p>
+            </div>
+            <button
+              onClick={() => auth.signOut()}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white hover:text-red-500 border border-transparent hover:border-red-100 shadow-sm"
+              title="تسجيل الخروج"
+            >
+              <LogOut className="h-4.5 w-4.5" />
+            </button>
+          </div>
         </div>
       </div>
     </header>

@@ -154,7 +154,7 @@ export default function Login() {
             <LogIn className="text-white w-10 h-10" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">تسجيل الدخول</h1>
-          <p className="text-gray-500 font-medium">مرحباً بك في نظام {settings?.storeName || 'رد أثر'} لإدارة الأحذية</p>
+          <p className="text-gray-500 font-medium">مرحباً بك في نظام {settings?.storeName || 'NEZAM PRO'}</p>
         </div>
 
         <form onSubmit={handleEmailSignIn} className="space-y-4">

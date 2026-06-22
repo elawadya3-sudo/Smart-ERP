@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, 
   Database,
@@ -7,19 +7,27 @@ import {
   Package,
   ArrowRightLeft,
   Search,
-  Box
+  Box,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { collection, query, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Warehouse, Product, InventoryTransaction } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { useRecordNavigatorStore } from '../../store/recordNavigatorStore';
+import { useBranchFilter } from '../../hooks/useBranchFilter';
 
 export default function WarehouseDetails() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const recordNav = useRecordNavigatorStore();
+  const restrictedBranchId = useBranchFilter();
   const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [transfers, setTransfers] = useState<InventoryTransaction[]>([]);
+  const [transferReceipts, setTransferReceipts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,15 +35,35 @@ export default function WarehouseDetails() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Fetch Warehouse
-        if (id === '1') {
-          setWarehouse({
+        // 1. Fetch All Warehouses for Navigation
+        const wSnap = await getDocs(query(collection(db, 'warehouses')));
+        let wList = wSnap.docs.map(d => ({ id: d.id, ...d.data() } as Warehouse));
+        if (!wList.some(w => w.id === '1')) {
+          wList.unshift({
             id: '1',
             name: 'المخزن الرئيسي (Main Warehouse)',
             code: 'MAIN',
             isActive: true,
             type: 'MAIN'
           } as any);
+        }
+
+        // Filter to restricted branch only if needed
+        const allowedWarehouses = restrictedBranchId
+          ? wList.filter(w => w.id === restrictedBranchId)
+          : wList;
+        setWarehouses(allowedWarehouses);
+
+        // 2. If cashier tries to access a warehouse they're not allowed — redirect
+        if (restrictedBranchId && id !== restrictedBranchId) {
+          navigate(`/inventory/warehouses/${restrictedBranchId}`, { replace: true });
+          return;
+        }
+
+        // 3. Set Current Warehouse
+        const currentWh = wList.find(w => w.id === id);
+        if (currentWh) {
+          setWarehouse(currentWh);
         } else {
           const wDoc = await getDoc(doc(db, 'warehouses', id!));
           if (wDoc.exists()) {
@@ -43,17 +71,27 @@ export default function WarehouseDetails() {
           }
         }
 
-        // 2. Fetch Products
+        // 4. Fetch Products
         const pSnap = await getDocs(query(collection(db, 'products')));
         const pDocs = pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
         setProducts(pDocs);
 
-        // 3. Fetch Transfers
+        // 5. Fetch Transfers
         const tSnap = await getDocs(query(collection(db, 'inventory_transactions')));
         const tDocs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as InventoryTransaction));
         setTransfers(tDocs);
 
-        // 4. Fetch Orders (Invoices) to deduct sold quantities
+        // 5b. Fetch Transfer Receipts
+        let trList: any[] = [];
+        try {
+          const trSnap = await getDocs(collection(db, 'transfer_receipts'));
+          trList = trSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          console.warn("No transfer receipts collection:", e);
+        }
+        setTransferReceipts(trList);
+
+        // 6. Fetch Orders (Invoices) to deduct sold quantities
         const oSnap = await getDocs(query(collection(db, 'orders')));
         const oDocs = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(oDocs);
@@ -68,7 +106,35 @@ export default function WarehouseDetails() {
     if (id) {
       fetchData();
     }
-  }, [id]);
+  }, [id, restrictedBranchId]);
+
+  const selectedIndex = warehouses.findIndex(w => w.id === id);
+  const goToWarehouse = (index: number) => {
+    const target = warehouses[index];
+    if (target) {
+      navigate(`/inventory/warehouses/${target.id}`);
+    }
+  };
+
+  useEffect(() => {
+    // Only show navigator if there is more than one warehouse to navigate
+    if (warehouse && warehouses.length > 1) {
+      recordNav.register({
+        currentIndex: selectedIndex >= 0 ? selectedIndex : 0,
+        total: warehouses.length,
+        label: 'المستودع الحالي',
+        onFirst: () => goToWarehouse(0),
+        onPrevious: () => goToWarehouse(Math.max(0, selectedIndex - 1)),
+        onNext: () => goToWarehouse(Math.min(warehouses.length - 1, selectedIndex + 1)),
+        onLast: () => goToWarehouse(warehouses.length - 1)
+      });
+    } else {
+      recordNav.unregister();
+    }
+    return () => {
+      recordNav.unregister();
+    };
+  }, [warehouse, selectedIndex, warehouses.length]);
 
   if (loading) {
     return (
@@ -99,24 +165,42 @@ export default function WarehouseDetails() {
       // Main warehouse: product.quantity is now updated immediately when transfer is created (as PENDING)
       return product.quantity || 0;
     } else {
-      // Branch warehouse stock = sum of COMPLETED transfers TO this branch - Sold quantities
-      const transfersToBranch = transfers.filter(
-        t => t.type === 'TRANSFER' && t.status === 'COMPLETED' && t.toWarehouseId === warehouse.id
+      // Branch warehouse stock = sum of RECEIVED transfer receipts TO this branch - transfers FROM this branch - Sold quantities + completed adjustments
+      const receiptsToBranch = transferReceipts.filter(
+        tr => (tr.status === 'RECEIVED' || tr.status === 'PARTIALLY_RECEIVED') && tr.toWarehouseId === warehouse.id
       );
       let incomingStock = 0;
-      transfersToBranch.forEach(t => {
+      receiptsToBranch.forEach(tr => {
+        const item = tr.items?.find((i: any) => i.productId === productId);
+        if (item) incomingStock += Number(item.receivedQty) || 0;
+      });
+
+      const transfersFromBranch = transfers.filter(
+        t => t.type === 'TRANSFER' && (t.status === 'COMPLETED' || t.status === 'SHIPPED') && t.fromWarehouseId === warehouse.id
+      );
+      let outgoingTransfers = 0;
+      transfersFromBranch.forEach(t => {
         const item = t.items?.find(i => i.productId === productId);
-        if (item) incomingStock += item.quantity;
+        if (item) outgoingTransfers += item.quantity;
       });
 
       const outgoingStock = orders
-        .filter(inv => inv.branchId === warehouse.id && inv.customerId !== 'EXPENSE')
+        .filter(inv => inv.branchId === warehouse.id && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
         .reduce((sum, inv) => {
           const item = inv.items?.find((i: any) => i.productId === productId);
           return sum + (item?.quantity || 0);
         }, 0);
 
-      return Math.max(0, incomingStock - outgoingStock);
+      const adjustmentsInBranch = transfers.filter(
+        t => t.type === 'ADJUSTMENT' && t.status === 'COMPLETED' && t.fromWarehouseId === warehouse.id
+      );
+      let adjustmentDelta = 0;
+      adjustmentsInBranch.forEach(t => {
+        const item = t.items?.find(i => i.productId === productId);
+        if (item) adjustmentDelta += item.quantity;
+      });
+
+      return Math.max(0, incomingStock - outgoingTransfers - outgoingStock + adjustmentDelta);
     }
   };
 
@@ -138,10 +222,13 @@ export default function WarehouseDetails() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <Link to="/inventory/warehouses" className="inline-flex items-center gap-2 text-blue-600 font-bold mb-4 hover:underline">
-            <ArrowRight className="w-4 h-4" />
-            العودة للمستودعات
-          </Link>
+          {/* Only show the "back" link if user can see the warehouses list */}
+          {!restrictedBranchId && (
+            <Link to="/inventory/warehouses" className="inline-flex items-center gap-2 text-blue-600 font-bold mb-4 hover:underline">
+              <ArrowRight className="w-4 h-4" />
+              العودة للمستودعات
+            </Link>
+          )}
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
               {isMain ? <Database className="w-8 h-8" /> : <Building2 className="w-8 h-8" />}
@@ -200,15 +287,16 @@ export default function WarehouseDetails() {
           <table className="w-full text-right border-collapse">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-center">الكمية (Stock)</th>
-                <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-center">سعر البيع (Unit Price)</th>
-                <th className="px-8 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-left">إجمالي القيمة (Value)</th>
+                <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-right">اسم المنتج</th>
+                <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-center">الكمية (Stock)</th>
+                <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-center">سعر البيع (Unit Price)</th>
+                <th className="px-6 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-left">إجمالي القيمة (Value)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-8 py-20 text-center text-gray-400 font-bold">
+                  <td colSpan={4} className="px-6 py-20 text-center text-gray-400 font-bold">
                     لا توجد منتجات في هذا المخزن
                   </td>
                 </tr>
@@ -220,7 +308,7 @@ export default function WarehouseDetails() {
                   key={product.id}
                   className="hover:bg-gray-50/50 transition-colors"
                 >
-                  <td className="px-8 py-6">
+                  <td className="px-6 py-6">
                     <div className="flex items-center gap-4">
                       {product.images && product.images.length > 0 ? (
                         <img src={product.images[0]} alt={product.name} className="w-12 h-12 rounded-xl object-cover border border-gray-100" />
@@ -235,16 +323,16 @@ export default function WarehouseDetails() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-8 py-6 text-center">
+                  <td className="px-6 py-6 text-center">
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-lg font-black text-gray-900 leading-none">{product.currentStock}</span>
                       <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">قطعة</span>
                     </div>
                   </td>
-                  <td className="px-8 py-6 text-center">
+                  <td className="px-6 py-6 text-center">
                     <span className="text-sm font-black text-blue-600">{formatCurrency(product.sellingPrice)}</span>
                   </td>
-                  <td className="px-8 py-6 text-left">
+                  <td className="px-6 py-6 text-left">
                     <span className="text-lg font-black text-gray-900 tracking-tighter">{formatCurrency(product.currentStock * product.sellingPrice)}</span>
                   </td>
                 </motion.tr>
