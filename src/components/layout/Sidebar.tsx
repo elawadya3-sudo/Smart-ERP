@@ -60,27 +60,23 @@ function SidebarItem({ to, icon: Icon, label, hasAlert, alertCount, onAlertClick
         title={collapsed ? label : undefined}
         className={({ isActive }) =>
           cn(
-            'group flex items-center gap-3 px-3.5 py-2 text-sm font-semibold transition-all duration-200 rounded-xl',
-            collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'w-full',
+            'group flex items-center gap-2.5 px-3 py-1.5 text-xs font-bold transition-all duration-150',
+            collapsed ? 'justify-center px-0 w-9 h-9 mx-auto rounded' : 'w-full',
             isActive
-              ? 'bg-blue-50/70 text-blue-600 font-bold border-r-[3px] border-blue-600 rounded-r-none'
-              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              ? 'bg-[var(--color-sidebar-hover)] text-[var(--color-primary)] border-r-[3.5px] border-[var(--color-primary)] font-extrabold font-black'
+              : 'text-[var(--color-sidebar-text)] hover:bg-[var(--color-sidebar-hover)] hover:text-white'
           )
         }
       >
         {({ isActive }) => (
           <>
-            <Icon className={cn('h-4.5 w-4.5 shrink-0 transition-colors duration-200', isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600')} />
+            <Icon className={cn('h-4.5 w-4.5 shrink-0 transition-colors duration-150', isActive ? 'text-[var(--color-primary)]' : 'text-slate-400 group-hover:text-white')} />
             {!collapsed && <span className="flex-1 text-right truncate">{label}</span>}
             {hasAlert && !collapsed && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="h-2 w-2 rounded-full bg-red-500"
-              />
+              <div className="h-1.5 w-1.5 rounded-full bg-red-500" />
             )}
             {hasAlert && collapsed && (
-              <div className="absolute top-1.5 left-1.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
+              <div className="absolute top-1 left-1 h-2.5 w-2.5 rounded-full bg-red-500 border border-[var(--color-sidebar-border)]" />
             )}
           </>
         )}
@@ -89,7 +85,7 @@ function SidebarItem({ to, icon: Icon, label, hasAlert, alertCount, onAlertClick
       {hasAlert && !collapsed && (
         <button
           onClick={onAlertClick}
-          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-black text-white"
+          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-red-500 px-1 py-0.5 text-[9px] font-black text-white"
         >
           {alertCount || '!'}
         </button>
@@ -128,7 +124,7 @@ function SidebarGroup({ label, icon: Icon, children, activePathPrefix, routeTo, 
   }, [location.pathname, activePathPrefix, collapsed]);
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       <button
         onClick={() => {
           if (routeTo) {
@@ -140,24 +136,24 @@ function SidebarGroup({ label, icon: Icon, children, activePathPrefix, routeTo, 
         }}
         title={collapsed ? label : undefined}
         className={cn(
-          'flex items-center justify-between rounded-xl px-3.5 py-2 text-sm font-bold transition-all duration-200',
-          collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'w-full',
+          'flex items-center justify-between px-3 py-1.5 text-xs font-bold transition-all duration-150',
+          collapsed ? 'justify-center px-0 w-9 h-9 mx-auto rounded' : 'w-full',
           isOpen || isGroupActive
-            ? 'bg-slate-50/70 text-slate-900 font-bold'
-            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            ? 'bg-[var(--color-sidebar-hover)] text-slate-100'
+            : 'text-[var(--color-sidebar-text)] hover:bg-[var(--color-sidebar-hover)] hover:text-white'
         )}
       >
-        <div className="flex items-center gap-3">
-          <Icon className={cn('h-4.5 w-4.5 transition-colors duration-200', (isOpen || isGroupActive) ? 'text-blue-600' : 'text-slate-400')} />
+        <div className="flex items-center gap-2.5">
+          <Icon className={cn('h-4.5 w-4.5 transition-colors duration-150', (isOpen || isGroupActive) ? 'text-[var(--color-primary)]' : 'text-slate-400')} />
           {!collapsed && <span>{label}</span>}
         </div>
         {!collapsed && (
-          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen ? 'rotate-180 text-blue-600' : 'text-slate-400')} />
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', isOpen ? 'rotate-180 text-[var(--color-primary)]' : 'text-slate-400')} />
         )}
       </button>
       {!collapsed && (
-        <div className={cn('overflow-hidden transition-all duration-300', isOpen ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0')}>
-          <div className="mr-2 mt-1 space-y-1 border-r border-slate-100 pr-1.5 pb-1">
+        <div className={cn('overflow-hidden transition-all duration-200', isOpen ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0')}>
+          <div className="mr-2.5 mt-0.5 space-y-0.5 border-r border-[var(--color-sidebar-border)] pr-1.5 pb-0.5">
             {children}
           </div>
         </div>
@@ -213,25 +209,25 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex h-full flex-col border-l border-slate-100 bg-white text-right transition-all duration-300 flex-shrink-0',
-        collapsed ? 'w-[60px]' : 'w-72'
+        'flex h-full flex-col border-l border-[var(--color-sidebar-border)] bg-[var(--color-sidebar)] text-right transition-all duration-300 flex-shrink-0 text-[var(--color-sidebar-text)] select-none shadow-xl',
+        collapsed ? 'w-[48px]' : 'w-56'
       )}
     >
       {/* Sidebar Header */}
       <div className={cn(
-        'flex items-center border-b border-slate-100 px-3 py-4 flex-shrink-0',
+        'flex items-center border-b border-[var(--color-sidebar-border)] px-2.5 py-2 flex-shrink-0 bg-[var(--color-sidebar)] brightness-95',
         collapsed ? 'justify-center' : 'justify-between'
       )}>
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/15">
-              <ShoppingCart className="h-4.5 w-4.5" />
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-[var(--color-primary)] text-white shadow-none">
+              <ShoppingCart className="h-4 w-4" />
             </div>
             <div className="text-right">
-              <h4 className="text-sm font-black text-slate-950 leading-none">
+              <h4 className="text-xs font-black text-[var(--color-sidebar-text)] brightness-125 leading-none">
                 {settings?.storeName || 'NEZAM PRO'}
               </h4>
-              <span className="text-[8px] font-black text-blue-600 mt-1 block uppercase">ERP System</span>
+              <span className="text-[7px] font-black text-[var(--color-primary)] mt-0.5 block uppercase">ERP System</span>
             </div>
           </div>
         )}
@@ -240,11 +236,11 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
         <button
           onClick={onToggle}
           title={collapsed ? 'توسيع القائمة' : 'تصغير القائمة'}
-          className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all"
+          className="h-6 w-6 inline-flex items-center justify-center rounded border border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-hover)] text-[var(--color-sidebar-text)] hover:text-white transition-all cursor-pointer"
         >
           {collapsed
-            ? <ChevronLeft className="h-4 w-4" />
-            : <ChevronRight className="h-4 w-4" />
+            ? <ChevronLeft className="h-3.5 w-3.5" />
+            : <ChevronRight className="h-3.5 w-3.5" />
           }
         </button>
       </div>
@@ -399,15 +395,15 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       </nav>
 
       {/* Sidebar Footer */}
-      <div className="border-t border-slate-100 p-3">
+      <div className="border-t border-[var(--color-sidebar-border)] p-2">
         {!collapsed && (
-          <div className="mb-2.5 flex items-center gap-3 rounded-xl bg-slate-50/70 border border-slate-100/50 p-2.5 transition-all duration-200">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-blue-600 text-sm font-bold text-white shadow-sm">
+          <div className="mb-2 flex items-center gap-2 rounded border border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-hover)] p-1.5 transition-all duration-200">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-bold text-white shadow-sm">
               {user?.name?.[0] || 'أ'}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-slate-900 leading-tight">{user?.name}</p>
-              <p className="truncate text-[10px] text-slate-500 font-bold mt-0.5">
+              <p className="truncate text-xs font-bold text-[var(--color-sidebar-text)] brightness-125 leading-tight">{user?.name}</p>
+              <p className="truncate text-[9px] text-slate-400 font-bold mt-0.5">
                 {user?.isRoot
                   ? 'المطور الرئيسي'
                   : user?.role === 'ADMIN'
@@ -433,8 +429,8 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
         )}
 
         {collapsed && (
-          <div className="mb-2.5 flex justify-center">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-blue-600 text-sm font-bold text-white shadow-sm" title={user?.name}>
+          <div className="mb-2 flex justify-center">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-bold text-white shadow-sm" title={user?.name}>
               {user?.name?.[0] || 'أ'}
             </div>
           </div>
@@ -444,11 +440,11 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           onClick={signOut}
           title={collapsed ? 'خروج' : undefined}
           className={cn(
-            'flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-400 transition hover:bg-red-50 hover:text-red-500 w-full',
-            collapsed && 'justify-center px-0 w-11 h-11 mx-auto'
+            'flex items-center gap-2 rounded px-2.5 py-1.5 text-xs font-bold text-slate-400 transition hover:bg-[var(--color-sidebar-hover)] hover:text-red-400 w-full cursor-pointer',
+            collapsed && 'justify-center px-0 w-8 h-8 mx-auto'
           )}
         >
-          <LogOut className="h-4.5 w-4.5 shrink-0" />
+          <LogOut className="h-4 w-4 shrink-0" />
           {!collapsed && <span>خروج</span>}
         </button>
       </div>

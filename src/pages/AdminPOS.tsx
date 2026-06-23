@@ -612,338 +612,406 @@ export default function AdminPOS() {
       </div>
 
       {/* Main Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
 
-        {/* Products Panel */}
-        <div className="xl:col-span-8 space-y-4">
+        {/* MAIN SIDE: Cart Items Table & Catalog (xl:col-span-8) */}
+        <div className="xl:col-span-8 space-y-3">
+          
           {/* Search & Filters */}
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-4">
-            <div className="relative">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <div className="bg-white p-2.5 rounded border border-slate-200 shadow-none space-y-3 select-none">
+            <div className="relative group">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
               <input
-                type="text" placeholder="بحث بالاسم أو الباركود..."
-                value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                type="text"
+                placeholder="بحث سريع عن منتج بالاسم أو الباركود..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                className="w-full border border-gray-200 rounded-2xl pr-10 pl-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full bg-slate-50 border border-slate-200 rounded py-1.5 pr-9 pl-4 outline-none text-xs font-bold transition focus:border-blue-500 focus:bg-white text-right"
+                autoFocus
               />
             </div>
-            <div className="flex gap-2 flex-wrap">
-              {categories.map(cat => (
-                <button key={cat} onClick={() => setSelectedCategory(cat)}
-                  className={cn('px-4 py-1.5 rounded-xl text-xs font-black transition-all',
-                    selectedCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}>
-                  {cat === 'All' ? 'الكل' : cat}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Products Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredProducts.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-300">
-                <Package className="w-16 h-16 mb-4 opacity-30" />
-                <p className="font-bold text-lg">لا توجد منتجات</p>
-              </div>
-            ) : filteredProducts.map((product) => {
-              const inCart = cart.find(i => i.productId === product.id);
-              return (
-                <motion.div key={product.id}
-                  whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
-                  onClick={() => addToCart(product)}
-                  className={cn(
-                    'bg-white rounded-3xl border-2 p-4 cursor-pointer transition-all shadow-sm hover:shadow-md relative',
-                    inCart ? 'border-blue-400 shadow-blue-50' : 'border-gray-100'
-                  )}
-                >
-                  {inCart && (
-                    <span className="absolute top-3 left-3 bg-blue-600 text-white font-black text-xs w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
-                      {inCart.quantity}
-                    </span>
-                  )}
-                  <div className="w-full aspect-square bg-gray-50 rounded-2xl flex items-center justify-center mb-3">
-                    {product.images?.[0] ? (
-                      <img src={product.images[0]} alt={product.name}
-                        className="w-full h-full object-cover rounded-2xl" />
-                    ) : (
-                      <Package className="w-10 h-10 text-gray-200" />
-                    )}
-                  </div>
-                  <p className="font-black text-gray-900 text-sm mb-1 truncate">{product.name}</p>
-                  <p className="text-xs text-gray-400 font-bold mb-2 truncate">{product.category}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-blue-600 text-sm">{formatCurrency(product.sellingPrice)}</span>
-                    {product.trackInventory === false ? (
-                      <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-green-50 text-green-600">
-                        متاح
-                      </span>
-                    ) : (
-                      <span className={cn('text-xs font-black px-2 py-0.5 rounded-lg border',
-                        (product.branchStock ?? 0) === 0 ? 'bg-red-50 text-red-500 border-red-200' :
-                        (product.branchStock ?? 0) < 5 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-green-50 text-green-600 border-green-100'
-                      )}>
-                        {(product.branchStock ?? 0) === 0 ? "نفذ" : product.branchStock}
-                      </span>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Cart Panel */}
-        <div className="xl:col-span-4">
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden sticky top-4">
-            {/* Cart Header */}
-            <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+          {/* Cart Items Table */}
+          <div className="bg-white rounded border border-slate-200 shadow-none overflow-hidden flex flex-col min-h-[280px]">
+            <div className="p-2.5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
               <div className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-blue-600" />
-                <h3 className="font-black text-gray-900">السلة</h3>
-                {cart.length > 0 && (
-                  <span className="bg-blue-600 text-white text-xs font-black w-6 h-6 rounded-full flex items-center justify-center">
-                    {cart.length}
-                  </span>
-                )}
+                <ShoppingCart className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-black text-slate-900">سلة المشتريات ({cart.length} أصناف)</span>
               </div>
               {cart.length > 0 && (
-                <button onClick={() => setCart([])} className="text-xs text-red-400 font-bold hover:text-red-600 transition-colors">
-                  مسح الكل
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 cursor-pointer focus:outline-none"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  تفريغ السلة
                 </button>
               )}
             </div>
-
-            {/* Cart Items */}
-            <div className="max-h-80 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto max-h-[300px] scrollbar-thin">
               {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-300">
-                  <ShoppingCart className="w-10 h-10 mb-2 opacity-30" />
-                  <p className="text-sm font-bold">السلة فارغة</p>
+                <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-slate-400 gap-2 opacity-60">
+                  <ShoppingCart className="w-10 h-10" />
+                  <p className="text-xs font-black">السلة فارغة حالياً. استخدم البحث أو اضغط على المنتجات بالأسفل للإضافة.</p>
                 </div>
-              ) : cart.map(item => (
-                <div key={item.sku || item.productId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
-                    <p className="text-xs text-gray-400 font-bold">{formatCurrency(item.price)} / قطعة</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.sku || item.productId, -1)}
-                      className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-all">
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-8 text-center font-black text-sm text-gray-900">{item.quantity}</span>
-                    <button onClick={() => updateQty(item.sku || item.productId, 1)}
-                      className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-green-50 hover:text-green-600 hover:border-green-100 transition-all">
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="text-left w-20">
-                    <p className="font-black text-sm text-gray-900">{formatCurrency(item.total)}</p>
-                  </div>
-                  <button onClick={() => removeItem(item.sku || item.productId)}
-                    className="w-7 h-7 rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Totals */}
-            {cart.length > 0 && (
-              <div className="border-t border-gray-50 p-6 space-y-4">
-                {/* Customer Selector */}
-                <div className="bg-white rounded-3xl p-4 border border-gray-100/80 space-y-3 relative z-20" ref={customerDropdownRef}>
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">العميل</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsNewCustomerModalOpen(true)}
-                      className="text-xs font-black text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer focus:outline-none"
-                    >
-                      + عميل جديد
-                    </button>
-                  </div>
-                  
-                  <div className="relative">
-                    <div className="relative">
-                      <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input
-                        type="text"
-                        placeholder="بحث بالاسم أو رقم الهاتف..."
-                        value={selectedCustomer ? `${selectedCustomer.name} (${selectedCustomer.phone})` : customerSearchTerm}
-                        onFocus={() => {
-                          setShowCustomerDropdown(true);
-                          if (selectedCustomer) {
-                            setCustomerSearchTerm('');
-                            setSelectedCustomer(null);
-                          }
-                        }}
-                        onChange={(e) => {
-                          setCustomerSearchTerm(e.target.value);
-                          setShowCustomerDropdown(true);
-                          setSelectedCustomer(null);
-                        }}
-                        className="w-full bg-slate-50 border-none rounded-2xl pr-10 pl-4 py-3 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
-                      />
-                      {selectedCustomer && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustomer(null);
-                            setCustomerSearchTerm('');
-                          }}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Customer Dropdown */}
-                    <AnimatePresence>
-                      {showCustomerDropdown && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute z-50 w-full mt-2 bg-white rounded-2xl border border-slate-100 shadow-2xl max-h-56 overflow-y-auto scrollbar-thin text-right"
-                        >
+              ) : (
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                    <tr className="text-slate-500 font-bold">
+                      <th className="px-3 py-1.5 text-right">المنتج</th>
+                      <th className="px-3 py-1.5 text-center w-24">السعر</th>
+                      <th className="px-3 py-1.5 text-center w-32">الكمية</th>
+                      <th className="px-3 py-1.5 text-left w-28">الإجمالي</th>
+                      <th className="px-3 py-1.5 text-center w-12">حذف</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cart.map((item) => (
+                      <tr key={item.sku || item.productId} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-3 py-1.5">
+                          <div className="font-black text-slate-800">{item.name}</div>
+                          {item.sku && <div className="text-[10px] text-slate-400 font-mono">{item.sku}</div>}
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-sans font-bold">
+                          {formatCurrency(item.price)}
+                        </td>
+                        <td className="px-3 py-1.5 text-center">
+                          <div className="inline-flex items-center border border-slate-200 rounded bg-slate-50 p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.sku || item.productId, -1)}
+                              className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-white hover:text-red-600 rounded transition-all focus:outline-none"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-8 text-center text-xs font-black text-slate-900 font-sans">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.sku || item.productId, 1)}
+                              className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-white hover:text-blue-600 rounded transition-all focus:outline-none"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-1.5 text-left font-sans font-black text-slate-900">
+                          {formatCurrency(item.total)}
+                        </td>
+                        <td className="px-3 py-1.5 text-center">
                           <button
                             type="button"
-                            onClick={() => {
-                              setSelectedCustomer(null);
-                              setCustomerSearchTerm('');
-                              setShowCustomerDropdown(false);
-                            }}
-                            className="w-full text-right p-3 hover:bg-slate-50 border-b border-slate-50 transition-colors flex items-center justify-between text-xs font-black text-slate-500"
+                            onClick={() => removeItem(item.sku || item.productId)}
+                            className="text-slate-400 hover:text-red-500 transition-colors p-1 focus:outline-none"
+                            title="حذف من السلة"
                           >
-                            <span>عميل نقدي / سفري (سريع)</span>
-                            <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-400 font-bold">افتراضي</span>
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                          {customers.filter(c =>
-                            (c.branchId || 'ADMIN') === selectedBranchId && (
-                              c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                              c.phone.includes(customerSearchTerm)
-                            )
-                          ).length === 0 ? (
-                            <div className="p-3 text-center text-xs text-gray-400 font-bold">لا يوجد نتائج مطابقة</div>
-                          ) : (
-                            customers.filter(c =>
-                              (c.branchId || 'ADMIN') === selectedBranchId && (
-                                c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                                c.phone.includes(customerSearchTerm)
-                              )
-                            ).map(c => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomer(c);
-                                  setCustomerSearchTerm(`${c.name} (${c.phone})`);
-                                  setShowCustomerDropdown(false);
-                                }}
-                                className="w-full text-right p-3 hover:bg-blue-50/50 border-b border-slate-50 transition-colors flex items-center justify-between gap-2"
-                              >
-                                <div className="text-right">
-                                  <p className="text-xs font-black text-slate-800">{c.name}</p>
-                                  <p className="text-[9px] text-gray-400 font-bold mt-0.5">{c.phone}</p>
-                                </div>
-                                <div className="text-left shrink-0">
-                                  {c.balance > 0 ? (
-                                    <span className={cn(
-                                      "text-[9px] px-2 py-0.5 rounded font-black border",
-                                      c.balanceType === 'credit' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
-                                    )}>
-                                      {formatCurrency(c.balance)} {c.balanceType === 'credit' ? 'دائن' : 'مدين'}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] text-slate-400 font-bold">رصيد: 0.00</span>
-                                  )}
-                                </div>
-                              </button>
-                            ))
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
 
-                  {/* Selected Customer Stats & Action */}
-                  {selectedCustomer && (
-                    <div className="flex items-center justify-between bg-slate-50/60 p-3 rounded-2xl border border-slate-100/50">
-                      <div className="text-right">
-                        <p className="text-[10px] text-slate-400 font-bold leading-none mb-1">الرصيد المالي الحالي</p>
-                        <p className={cn(
-                          "text-xs font-black",
-                          selectedCustomer.balance === 0
-                            ? "text-slate-500"
-                            : selectedCustomer.balanceType === 'credit'
-                            ? "text-emerald-600"
-                            : "text-rose-600"
-                        )}>
-                          {selectedCustomer.balance > 0
-                            ? `${formatCurrency(selectedCustomer.balance)} ${selectedCustomer.balanceType === 'credit' ? 'دائن (له)' : 'مدين (عليه)'}`
-                            : '0.00 ج.م'
-                          }
-                        </p>
-                      </div>
+          {/* Product Catalog Section */}
+          <div className="bg-white rounded border border-slate-200 shadow-none p-3 space-y-2 select-none">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-slate-500" />
+                <span className="text-xs font-black text-slate-800">دليل المنتجات السريع</span>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin max-w-full">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={cn(
+                      "px-2.5 py-0.5 rounded text-[10px] font-bold transition-all whitespace-nowrap border",
+                      selectedCategory === cat
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                    )}
+                  >
+                    {cat === 'All' ? 'الكل' : cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+              {filteredProducts.length === 0 ? (
+                <div className="bg-slate-50 rounded border border-slate-100 p-8 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Package className="w-8 h-8 opacity-40" />
+                  <p className="text-xs font-bold">لا توجد منتجات مطابقة للبحث</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-5 gap-2">
+                  {filteredProducts.map((product) => {
+                    const inCart = cart.find(i => i.productId === product.id);
+                    return (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+                        className={cn(
+                          "bg-slate-50 hover:bg-slate-100/80 rounded border p-2 transition-all flex flex-col justify-between text-right text-xs group",
+                          inCart ? 'border-blue-500 bg-blue-50/20' : 'border-slate-200'
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <p className="text-[9px] font-bold text-blue-600">{product.category}</p>
+                            {product.images?.[0] && (
+                              <img src={product.images[0]} className="w-5 h-5 object-cover rounded" alt="" />
+                            )}
+                          </div>
+                          <h4 className="font-black text-slate-900 line-clamp-1 leading-snug">{product.name}</h4>
+                          
+                          {product.trackInventory === false ? (
+                            <span className="inline-block mt-1 text-[9px] px-1 bg-green-50 text-green-600 border border-green-100 rounded">متاح</span>
+                          ) : (
+                            <span className={cn(
+                              "inline-block mt-1 text-[9px] px-1 border rounded",
+                              (product.branchStock ?? 0) === 0 ? "bg-red-50 text-red-500 border-red-100" :
+                              (product.branchStock ?? 0) < 5 ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-green-50 text-green-600 border-green-100"
+                            )}>
+                              {(product.branchStock ?? 0) === 0 ? "نفذ" : `${product.branchStock} ق`}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 pt-1 border-t border-slate-200/50 flex items-center justify-between">
+                          <span className="font-sans font-black text-blue-600">{formatCurrency(product.sellingPrice)}</span>
+                          <Plus className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* LEFT SIDE: Billing, Customer & Checkout (xl:col-span-4) */}
+        <div className="xl:col-span-4">
+          <div className="bg-white rounded border border-slate-200 p-4 space-y-4 sticky top-4">
+            
+            {/* Header / Info */}
+            <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
+              <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <User className="w-4 h-4 text-blue-600" />
+                خيارات الفاتورة والعميل
+              </h3>
+            </div>
+
+            {/* Customer Selector */}
+            <div className="space-y-2 relative" ref={customerDropdownRef}>
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">العميل</label>
+                <button
+                  type="button"
+                  onClick={() => setIsNewCustomerModalOpen(true)}
+                  className="text-[10px] font-black text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5 cursor-pointer focus:outline-none"
+                >
+                  + عميل جديد
+                </button>
+              </div>
+              
+              <div className="relative">
+                <User className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                <input
+                  type="text"
+                  placeholder="بحث بالاسم أو رقم الهاتف..."
+                  value={selectedCustomer ? `${selectedCustomer.name} (${selectedCustomer.phone})` : customerSearchTerm}
+                  onFocus={() => {
+                    setShowCustomerDropdown(true);
+                    if (selectedCustomer) {
+                      setCustomerSearchTerm('');
+                      setSelectedCustomer(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setCustomerSearchTerm(e.target.value);
+                    setShowCustomerDropdown(true);
+                    setSelectedCustomer(null);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded pr-9 pl-8 py-1.5 text-xs font-bold outline-none focus:bg-white focus:border-blue-500 transition-all text-right"
+                />
+                {selectedCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerSearchTerm('');
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+
+                {/* Customer Dropdown */}
+                <AnimatePresence>
+                  {showCustomerDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
+                      className="absolute z-50 w-full mt-1 bg-white rounded border border-slate-200 shadow-lg max-h-48 overflow-y-auto scrollbar-thin text-right"
+                    >
                       <button
                         type="button"
                         onClick={() => {
-                          localStorage.setItem(`default_pos_customer_id_${selectedBranchId}`, selectedCustomer.id);
-                          alert(`تم تعيين العميل "${selectedCustomer.name}" كعميل افتراضي للبيعات بنجاح.`);
+                          setSelectedCustomer(null);
+                          setCustomerSearchTerm('');
+                          setShowCustomerDropdown(false);
                         }}
-                        className="px-3 py-1.5 bg-white text-slate-600 font-black border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-[10px] cursor-pointer focus:outline-none"
+                        className="w-full text-right p-2 hover:bg-slate-50 border-b border-slate-100 transition-colors flex items-center justify-between text-xs font-black text-slate-500"
                       >
-                        تعيين كافتراضي
+                        <span>عميل نقدي (افتراضي)</span>
+                        <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-400 font-bold">افتراضي</span>
                       </button>
-                    </div>
+                      {customers.filter(c =>
+                        (c.branchId || 'ADMIN') === selectedBranchId && (
+                          c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                          c.phone.includes(customerSearchTerm)
+                        )
+                      ).length === 0 ? (
+                        <div className="p-2.5 text-center text-xs text-gray-400 font-bold">لا يوجد نتائج مطابقة</div>
+                      ) : (
+                        customers.filter(c =>
+                          (c.branchId || 'ADMIN') === selectedBranchId && (
+                            c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                            c.phone.includes(customerSearchTerm)
+                          )
+                        ).map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomer(c);
+                              setCustomerSearchTerm(`${c.name} (${c.phone})`);
+                              setShowCustomerDropdown(false);
+                            }}
+                            className="w-full text-right p-2 hover:bg-blue-50/50 border-b border-slate-100 transition-colors flex items-center justify-between gap-2"
+                          >
+                            <div className="text-right">
+                              <p className="text-xs font-black text-slate-800">{c.name}</p>
+                              <p className="text-[9px] text-gray-400 font-bold mt-0.5">{c.phone}</p>
+                            </div>
+                            <div className="text-left shrink-0">
+                              {c.balance > 0 ? (
+                                <span className={cn(
+                                  "text-[9px] px-1.5 py-0.5 rounded font-black border",
+                                  c.balanceType === 'credit' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
+                                )}>
+                                  {formatCurrency(c.balance)} {c.balanceType === 'credit' ? 'دائن' : 'مدين'}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 font-bold">رصيد: 0.00</span>
+                              )}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </motion.div>
                   )}
-                </div>
+                </AnimatePresence>
+              </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm text-gray-400 font-bold">
-                    <span>المجموع الفرعي</span>
-                    <span>{formatCurrency(subtotal)}</span>
+              {/* Selected Customer Stats & Action */}
+              {selectedCustomer && (
+                <div className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-200/60">
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-400 font-bold leading-none mb-0.5">الرصيد المالي الحالي</p>
+                    <p className={cn(
+                      "text-xs font-black",
+                      selectedCustomer.balance === 0
+                        ? "text-slate-500"
+                        : selectedCustomer.balanceType === 'credit'
+                        ? "text-emerald-600"
+                        : "text-rose-600"
+                    )}>
+                      {selectedCustomer.balance > 0
+                        ? `${formatCurrency(selectedCustomer.balance)} ${selectedCustomer.balanceType === 'credit' ? 'دائن' : 'مدين'}`
+                        : '0.00 ج.م'
+                      }
+                    </p>
                   </div>
-                  {tax > 0 && (
-                    <div className="flex justify-between text-sm text-gray-400 font-bold">
-                      <span>الضريبة ({taxRate}%)</span>
-                      <span>{formatCurrency(tax)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-black text-gray-900 text-lg pt-2 border-t border-gray-100">
-                    <span>الإجمالي</span>
-                    <span className="text-blue-600">{formatCurrency(total)}</span>
-                  </div>
-                </div>
-
-                <textarea
-                  placeholder="ملاحظات (اختياري)..."
-                  value={noteText} onChange={e => setNoteText(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100 resize-none"
-                  rows={2}
-                />
-
-                <button
-                  onClick={() => setIsCheckoutOpen(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-sm transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
-                >
-                  <CreditCard className="w-4 h-4" /> تأكيد وإتمام البيع
-                </button>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest text-center mb-3">أو طباعة بدون تسجيل</p>
                   <button
-                    onClick={() => printReceipt({ id: 'DRAFT', items: cart, total, paymentMethod: 'cash' })}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-black transition-all"
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem(`default_pos_customer_id_${selectedBranchId}`, selectedCustomer.id);
+                      alert(`تم تعيين العميل "${selectedCustomer.name}" كعميل افتراضي للبيعات بنجاح.`);
+                    }}
+                    className="px-2 py-1 bg-white text-slate-600 font-black border border-slate-200 rounded hover:bg-slate-50 transition-all text-[9px] cursor-pointer focus:outline-none"
                   >
-                    <Printer className="w-4 h-4" />
+                    تعيين كافتراضي
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Note Area */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">ملاحظات الفاتورة</label>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="أضف أي ملاحظات هنا..."
+                className="w-full h-12 min-h-[48px] resize-none bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition-all"
+              />
+            </div>
+
+            {/* Price Calculations */}
+            <div className="border-t border-b border-slate-100 py-3 space-y-1.5">
+              <div className="flex justify-between text-xs font-black text-slate-400">
+                <span>المجموع الفرعي</span>
+                <span className="font-sans">{formatCurrency(subtotal)}</span>
+              </div>
+              {tax > 0 && (
+                <div className="flex justify-between text-xs font-black text-slate-400">
+                  <span>الضريبة ({taxRate}%)</span>
+                  <span className="font-sans">{formatCurrency(tax)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-slate-200">
+                <span className="text-xs font-black text-slate-900">المجموع النهائي</span>
+                <span className="text-xl font-black text-blue-600 font-sans tracking-tight">{formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            {/* Checkout / Payment Buttons */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={cart.length === 0}
+                onClick={() => setIsCheckoutOpen(true)}
+                className="w-full bg-blue-600 text-white font-black py-2.5 rounded hover:bg-blue-700 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              >
+                <CreditCard className="w-4 h-4" />
+                تأكيد وإتمام البيع
+              </button>
+
+              {cart.length > 0 && (
+                <div className="border-t border-slate-100 pt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => printReceipt({ id: 'DRAFT', items: cart, total, paymentMethod: 'cash' })}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 text-xs font-black transition-all cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
                     طباعة مسودة الفاتورة
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
           </div>
         </div>
       </div>

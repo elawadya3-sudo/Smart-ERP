@@ -56,6 +56,7 @@ import SystemModules from './pages/superadmin/SystemModules';
 import PosCustomers from './pages/pos/PosCustomers';
 import POSReports from './pages/pos/POSReports';
 import POSSettings from './pages/pos/POSSettings';
+import { ThemeProvider } from './context/ThemeContext';
 import { DesktopIntegrationProvider } from './context/DesktopIntegrationContext';
 
 // ─── Super Admin Imports ──────────────────────────────────────────────────────
@@ -106,11 +107,12 @@ export default function App() {
   }, [settings]);
 
   return (
-    <SuperAdminProvider>
-      <AuthProvider>
-        <DesktopIntegrationProvider>
-          <POSProvider>
-            <Router>
+    <ThemeProvider>
+      <SuperAdminProvider>
+        <AuthProvider>
+          <DesktopIntegrationProvider>
+            <POSProvider>
+              <Router>
           <Routes>
             {/* ── Super Admin Routes (fully isolated) ── */}
             <Route path="/superadmin/login" element={<SuperAdminLogin />} />
@@ -190,5 +192,6 @@ export default function App() {
         </DesktopIntegrationProvider>
       </AuthProvider>
     </SuperAdminProvider>
+    </ThemeProvider>
   );
 }

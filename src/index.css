@@ -1,17 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", "Cairo", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #4f46e5;
-  --color-primary-dark: #3730a3;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #f43f5e;
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-success: #16a34a;
+  --color-warning: #ea580c;
+  --color-danger: #dc2626;
   --color-background: #f8fafc;
-  --font-size-xs: 0.78rem;
-  --font-size-sm: 0.9rem;
-  --font-size-base: 1rem;
+  
+  /* Sidebar variables */
+  --color-sidebar: #0f172a;
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-hover: #1e293b;
+  --color-sidebar-border: #1e293b;
+  
+  /* Layout Factors */
+  --padding-factor: 0.75;
+  --font-size-factor: 0.9;
+}
+
+@theme {
+  --font-sans: "Cairo", "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: var(--color-primary);
+  --color-primary-dark: var(--color-primary-hover);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-background: var(--color-background);
+  --font-size-xs: calc(0.72rem * var(--font-size-factor));
+  --font-size-sm: calc(0.80rem * var(--font-size-factor));
+  --font-size-base: calc(0.90rem * var(--font-size-factor));
 }
 
 @layer base {
@@ -24,9 +43,12 @@
   }
 
   body {
-    @apply bg-[var(--color-background)] text-slate-800 antialiased;
+    background-color: var(--color-background) !important;
+    color: #334155 !important; /* text-slate-700 */
     font-family: "Cairo", "Inter", sans-serif;
-    line-height: 1.6;
+    line-height: 1.4;
+    font-size: calc(13px * var(--font-size-factor));
+    @apply antialiased;
   }
 
   button,
@@ -35,62 +57,180 @@
   textarea {
     font: inherit;
   }
+
+  /* High Density Global Table Styling */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: right;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  th {
+    background-color: #f1f5f9 !important; /* bg-slate-100 */
+    color: #475569 !important; /* text-slate-600 */
+    font-size: calc(11px * var(--font-size-factor)) !important;
+    font-weight: 700 !important;
+    padding: calc(6px * var(--padding-factor)) calc(10px * var(--padding-factor)) !important;
+    border-bottom: 2px solid #cbd5e1 !important; /* border-slate-300 */
+    white-space: nowrap;
+  }
+
+  td {
+    font-size: calc(12px * var(--font-size-factor)) !important;
+    padding: calc(5px * var(--padding-factor)) calc(10px * var(--padding-factor)) !important;
+    border-bottom: 1px solid #e2e8f0 !important; /* border-slate-200 */
+    color: #334155 !important; /* text-slate-700 */
+    vertical-align: middle;
+  }
+
+  tr:hover {
+    background-color: #f8fafc !important; /* hover:bg-slate-50 */
+  }
+
+  /* Global Inputs and Select heights */
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="date"],
+  select,
+  textarea {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4px !important;
+    background-color: #ffffff !important;
+    padding: calc(5px * var(--padding-factor)) calc(10px * var(--padding-factor)) !important;
+    font-size: calc(12px * var(--font-size-factor)) !important;
+    font-weight: 600 !important;
+    outline: none !important;
+    transition: all 0.15s ease-in-out !important;
+    text-align: right;
+  }
+  
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  input[type="email"]:focus,
+  input[type="password"]:focus,
+  input[type="tel"]:focus,
+  input[type="date"]:focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
+  }
 }
 
 @layer components {
-  /* Premium modern card */
-  /* Premium modern card */
+  /* Compact Administrative Card */
   .erp-card {
-    @apply rounded-[1.25rem] sm:rounded-[1.75rem] border border-slate-100 bg-white p-4 sm:p-5 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.02)] transition-all duration-300 hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.04)];
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background-color: #ffffff;
+    padding: calc(12px * var(--padding-factor));
+    box-shadow: none;
   }
 
   /* Table styles */
   .erp-table-header {
-    @apply bg-slate-50/70 text-slate-500 text-xs font-black tracking-wider uppercase py-4 px-6;
+    background-color: #f1f5f9;
+    color: #475569;
+    font-size: calc(11px * var(--font-size-factor));
+    font-weight: 700;
+    padding: calc(6px * var(--padding-factor)) calc(12px * var(--padding-factor));
+    border-bottom: 2px solid #cbd5e1;
   }
 
   /* Navigation elements */
   .erp-nav-btn {
-    @apply inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-200 hover:border-blue-200 hover:bg-blue-50/50 hover:text-blue-600 hover:scale-105 active:scale-95;
+    @apply inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
   }
 
   /* Toolbar buttons */
   .erp-toolbar-btn {
-    @apply inline-flex items-center gap-2 rounded-xl border border-slate-200/88 bg-white px-4 py-3 text-xs font-bold text-slate-700 transition-all duration-200 hover:border-blue-200 hover:bg-blue-50/50 hover:text-blue-600 hover:scale-[1.02] active:scale-[0.98];
+    @apply inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
   }
 
   /* Primary button style */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 text-white px-5 py-3 text-xs font-black shadow-md shadow-blue-100 transition-all duration-200 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 4px;
+    background-color: var(--color-primary);
+    color: #ffffff;
+    padding: calc(6px * var(--padding-factor)) calc(12px * var(--padding-factor));
+    font-size: calc(11px * var(--font-size-factor));
+    font-weight: 700;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+    border: none;
+  }
+  
+  .btn-primary:hover {
+    background-color: var(--color-primary-hover);
+  }
+  
+  .btn-primary:disabled {
+    opacity: 0.5;
+    pointer-events: none;
   }
 
   /* Standard input fields */
   .erp-input {
-    @apply w-full rounded-xl border border-slate-200/85 bg-white px-4 py-3 text-right text-sm text-slate-800 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100/50 focus:bg-white;
+    width: 100%;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background-color: #ffffff;
+    padding: calc(6px * var(--padding-factor)) calc(10px * var(--padding-factor));
+    text-align: right;
+    font-size: calc(12px * var(--font-size-factor));
+    color: #1e293b;
+    outline: none;
+    transition: all 0.15s ease-in-out;
+  }
+  
+  .erp-input:focus {
+    border-color: var(--color-primary);
+    background-color: #ffffff;
   }
 
-  /* Frosted Glassmorphism card */
+  /* Flat Card */
   .glass-card {
-    @apply bg-white/75 backdrop-blur-xl border border-white/30 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)];
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
   }
 
-  /* Premium modern modal container */
+  /* ERP standard compact modal */
   .erp-modal {
-    @apply relative w-full bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 shadow-2xl overflow-hidden;
+    position: relative;
+    width: 100%;
+    background-color: #ffffff;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    padding: calc(16px * var(--padding-factor));
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
   }
 }
 
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: #cbd5e1;
-    border-radius: 999px;
+    border-radius: 4px;
   }
   .scrollbar-thin:hover::-webkit-scrollbar-thumb {
     background-color: #94a3b8;

@@ -195,55 +195,55 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/85 backdrop-blur-md flex-shrink-0">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 sm:px-4 lg:px-5">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-sm flex-shrink-0">
+      <div className="w-full flex h-12 items-center gap-2.5 px-3">
         <button
           onClick={onMenuClick}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+          className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 text-slate-600 transition hover:bg-slate-50"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4.5 w-4.5" />
         </button>
 
         {/* Brand Identity Header (ShoppingCart + Name + ERP Badge) */}
-        <div className="flex items-center gap-3.5 mr-2 flex-shrink-0 pl-4 border-l border-slate-100 h-10">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/15">
-            <ShoppingCart className="h-5 w-5" />
+        <div className="flex items-center gap-2 mr-1 flex-shrink-0 pl-3 border-l border-slate-200 h-8">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--color-primary)] text-white shadow-none">
+            <ShoppingCart className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex flex-col justify-center text-right">
-            <h1 className="text-sm font-black text-slate-950 tracking-tight leading-none truncate">
+            <h1 className="text-xs font-black text-slate-950 tracking-tight leading-none truncate">
               {settings?.storeName || 'NEZAM PRO'}
             </h1>
-            <div className="flex items-center mt-1">
-              <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-1 py-0.5 rounded tracking-wider uppercase leading-none font-mono">
+            <div className="flex items-center mt-0.5">
+              <span className="text-[7px] font-black bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-1 py-0.5 rounded tracking-wider uppercase leading-none font-mono">
                 ERP System
               </span>
             </div>
           </div>
         </div>
 
-        <span className="h-6 w-px bg-slate-100 hidden sm:block mr-2" />
+        <span className="h-5 w-px bg-slate-200 hidden sm:block mr-1.5" />
 
         {/* Dynamic Context Header Info */}
-        <div className="mr-2 hidden sm:flex flex-col justify-center text-right flex-shrink-0">
-          <h2 className="text-xs font-black text-slate-700 leading-none">
+        <div className="mr-1.5 hidden sm:flex flex-col justify-center text-right flex-shrink-0">
+          <h2 className="text-[11px] font-black text-slate-700 leading-none">
             {currentBranch ? currentBranch.name : 'المستودع الرئيسي'}
           </h2>
-          <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase">
+          <span className="text-[8px] font-bold text-slate-400 mt-0.5 uppercase">
             {user?.role?.toUpperCase() === 'ADMIN' ? 'لوحة التحكم والتحليلات' : 'شاشة المبيعات والكاشير'}
           </span>
         </div>
 
         {/* Global Search Bar (Desktop) */}
-        <div ref={searchContainerRef} className="mr-4 flex-1 max-w-md hidden md:block relative">
-          <div className="w-full flex items-center bg-slate-50/70 border border-slate-200/50 rounded-xl pr-3.5 pl-3 py-2 transition-all">
-            <Search className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+        <div ref={searchContainerRef} className="mr-3 flex-1 max-w-sm hidden md:block relative">
+          <div className="w-full flex items-center bg-slate-50 border border-slate-200 rounded pr-2.5 pl-2 py-1 transition-all">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={handleFocus}
               placeholder="البحث السريع في الفواتير، الأصناف والعملاء..."
-              className="w-full bg-transparent border-none text-slate-800 outline-none text-xs font-bold placeholder-slate-400 text-right"
+              className="w-full bg-transparent border-none text-slate-800 outline-none text-xs font-bold placeholder-slate-400 text-right py-0"
             />
           </div>
           
@@ -251,7 +251,7 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
             <div className="absolute right-0 top-full mt-2 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 max-h-[400px] overflow-y-auto" dir="rtl">
               {loading ? (
                 <div className="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
                   <span className="text-[11px] font-bold">جاري البحث في قاعدة البيانات...</span>
                 </div>
               ) : (filteredProducts.length === 0 && filteredCustomers.length === 0 && filteredSuppliers.length === 0) ? (
@@ -270,7 +270,7 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
                             onClick={() => { navigate('/inventory/products'); setSearchQuery(''); setIsFocused(false); }} 
                             className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer"
                           >
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
                               <Package className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0 text-right">
@@ -334,22 +334,22 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
           )}
         </div>
 
-        <div className="mr-auto flex items-center gap-3">
+        <div className="mr-auto flex items-center gap-2">
           {/* Global Search Trigger (Mobile) */}
           <button 
             onClick={onSearchClick}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+            className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
           >
-            <Search className="h-4.5 w-4.5" />
+            <Search className="h-4 w-4" />
           </button>
 
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className={cn(
-                'relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-200',
+                'relative inline-flex h-8 w-8 items-center justify-center rounded border transition-all duration-200',
                 showNotifications
-                  ? 'border-blue-200 bg-blue-50 text-blue-600'
+                  ? 'border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
                   : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
               )}
             >
@@ -389,7 +389,7 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
                             e.stopPropagation();
                             notifications.filter((n) => !n.isRead).forEach((n) => notificationsService.markAsRead(n.id));
                           }}
-                          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-colors"
                         >
                           <Check className="h-3.5 w-3.5" />
                           قراءة الكل
@@ -459,19 +459,19 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
             </AnimatePresence>
           </div>
 
-          <div className="hidden items-center gap-3 rounded-2xl bg-slate-50/80 border border-slate-100 px-3 py-1.5 md:flex">
+          <div className="hidden items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 md:flex">
             <div className="text-left">
-              <p className="text-sm font-black text-slate-800">{user?.name || 'مدير النظام'}</p>
-              <p className="text-[10px] font-extrabold text-blue-600 tracking-wider uppercase">
+              <p className="text-xs font-black text-slate-800 leading-none">{user?.name || 'مدير النظام'}</p>
+              <p className="text-[8px] font-extrabold text-[var(--color-primary)] tracking-wider uppercase mt-0.5">
                 {user?.role?.toUpperCase() === 'ADMIN' ? 'Administrator' : 'Staff'}
               </p>
             </div>
             <button
               onClick={() => auth.signOut()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white hover:text-red-500 border border-transparent hover:border-red-100 shadow-sm"
+              className="inline-flex h-6.5 w-6.5 items-center justify-center rounded text-slate-400 hover:text-red-500 transition hover:bg-red-50"
               title="تسجيل الخروج"
             >
-              <LogOut className="h-4.5 w-4.5" />
+              <LogOut className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

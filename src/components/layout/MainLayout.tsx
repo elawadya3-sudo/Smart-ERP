@@ -47,7 +47,7 @@ export default function MainLayout() {
 
         {/* Main content area */}
         <div className="flex-1 overflow-y-auto min-w-0 flex flex-col justify-between">
-          <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-4 sm:px-6 lg:px-8">
+          <main className="w-full px-3 pb-4 pt-2 flex-1 flex flex-col min-h-0">
             <Breadcrumbs />
             <AnimatePresence mode="wait">
               <motion.div

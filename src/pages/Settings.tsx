@@ -15,10 +15,12 @@ import {
   Search,
   Upload,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Palette
 } from 'lucide-react';
 import { productsService, systemService } from '../services/firestore';
 import { cn } from '../lib/utils';
+import { useTheme, THEME_PRESETS } from '../context/ThemeContext';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -57,6 +59,17 @@ import PageToolbar from '../components/ui/PageToolbar';
 
 export default function Settings() {
   const { user } = useAuth();
+  const {
+    themeColor,
+    themeHoverColor,
+    sidebarTheme,
+    density,
+    setThemeColor,
+    setThemeHoverColor,
+    setSidebarTheme,
+    setDensity,
+    applyPreset
+  } = useTheme();
   const isAdmin = user?.role === 'ADMIN';
   const isRoot = user?.isRoot === true;
   const [activeTab, setActiveTab] = useState(isRoot ? 'security' : 'general');
@@ -284,6 +297,7 @@ export default function Settings() {
                { id: 'general', label: 'إعدادات عامة', icon: Store },
                { id: 'security', label: 'الأمان والصلاحيات', icon: Shield },
                { id: 'printers', label: 'الطابعات والفواتير', icon: Printer },
+               { id: 'theme', label: 'مظهر النظام والسمات', icon: Palette },
                { id: 'localization', label: 'اللغة والعملة', icon: Globe },
              ].map(tab => (
                <button 
@@ -292,7 +306,7 @@ export default function Settings() {
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "w-full flex items-center gap-3 px-6 py-4 rounded-2xl font-bold text-sm transition-all",
-                  tab.id === activeTab ? "bg-white text-blue-600 shadow-sm border border-blue-50" : "text-gray-400 hover:text-gray-600 hover:bg-white"
+                  tab.id === activeTab ? "bg-white text-[var(--color-primary)] shadow-sm border border-[var(--color-primary)]/10" : "text-gray-400 hover:text-gray-600 hover:bg-white"
                 )}
                >
                  <tab.icon className="w-5 h-5" />
@@ -1075,6 +1089,170 @@ export default function Settings() {
               </div>
               <h4 className="text-xl font-black text-gray-900 mb-2">قريباً في التحديث القادم</h4>
               <p className="text-gray-400 font-bold">هذه الإعدادات سيتم تفعيلها في الإصدار القادم من النظام.</p>
+            </div>
+          )}
+
+          {activeTab === 'theme' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">مظهر النظام والسمات</h3>
+                  <p className="text-sm text-gray-400 font-medium">تخصيص ألوان البرنامج بالكامل، شكل القائمة الجانبية وكثافة عرض البيانات من مكان واحد.</p>
+                </div>
+
+                {/* Preset Themes */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-black text-slate-800">السمات الجاهزة</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {THEME_PRESETS.map((preset) => {
+                      const isActive = themeColor === preset.primary;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => applyPreset(preset.id)}
+                          className={cn(
+                            "relative flex items-center gap-3 p-4 bg-slate-50 border-2 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition-all text-right w-full",
+                            isActive ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-slate-100"
+                          )}
+                        >
+                          <div 
+                            className="w-6 h-6 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: preset.primary }} 
+                          />
+                          <div>
+                            <p className="font-bold text-slate-900 text-xs">{preset.name}</p>
+                            <p className="text-[10px] text-slate-400 font-medium font-mono">{preset.primary}</p>
+                          </div>
+                          {isActive && (
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[var(--color-primary)]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Theme Color Picker */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 block">لون الهوية الرئيسي</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200"
+                      />
+                      <input
+                        type="text"
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        className="flex-1 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold font-mono outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 block">لون الهوية عند التمرير (Hover)</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={themeHoverColor}
+                        onChange={(e) => setThemeHoverColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200"
+                      />
+                      <input
+                        type="text"
+                        value={themeHoverColor}
+                        onChange={(e) => setThemeHoverColor(e.target.value)}
+                        className="flex-1 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold font-mono outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sidebar Layout Style */}
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <h4 className="text-sm font-black text-slate-800">مظهر القائمة الجانبية (Sidebar)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarTheme('dark')}
+                      className={cn(
+                        "flex items-center justify-between p-4 bg-slate-50 border-2 rounded-2xl cursor-pointer transition-all w-full text-right",
+                        sidebarTheme === 'dark' ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-white text-[10px] font-bold">داكن</div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">النمط الداكن الاحترافي</p>
+                          <p className="text-[10px] text-slate-400 font-medium">مظهر غامق مريح للعين أثناء العمل الطويل</p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSidebarTheme('light')}
+                      className={cn(
+                        "flex items-center justify-between p-4 bg-slate-50 border-2 rounded-2xl cursor-pointer transition-all w-full text-right",
+                        sidebarTheme === 'light' ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-800 text-[10px] font-bold">فاتح</div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">النمط الفاتح الكلاسيكي</p>
+                          <p className="text-[10px] text-slate-400 font-medium">مظهر ناصع البياض يتماشى مع الواجهة العامة</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Density Layout Style */}
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <h4 className="text-sm font-black text-slate-800">كثافة واجهة المستخدم والمسافات (Layout Density)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setDensity('compact')}
+                      className={cn(
+                        "flex items-center justify-between p-4 bg-slate-50 border-2 rounded-2xl cursor-pointer transition-all w-full text-right",
+                        density === 'compact' ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-800 text-[10px] font-bold">مدمج</div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">نمط مدمج (Compact ERP)</p>
+                          <p className="text-[10px] text-slate-400 font-medium">تقليل المساحات وارتفاع الصفوف لعرض أكبر قدر من البيانات</p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDensity('comfortable')}
+                      className={cn(
+                        "flex items-center justify-between p-4 bg-slate-50 border-2 rounded-2xl cursor-pointer transition-all w-full text-right",
+                        density === 'comfortable' ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-200/50 flex items-center justify-center text-slate-800 text-[10px] font-bold">مريح</div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">نمط مريح (Comfortable)</p>
+                          <p className="text-[10px] text-slate-400 font-medium">تباعد مريح وحجم خط افتراضي مناسب للقراءة السريعة</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
             </div>
           )}
         </div>
