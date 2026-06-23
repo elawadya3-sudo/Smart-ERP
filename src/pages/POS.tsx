@@ -2002,12 +2002,12 @@ export default function POS() {
                               <p className="text-[9px] text-gray-400 font-bold mt-0.5">{c.phone}</p>
                             </div>
                             <div className="text-left shrink-0">
-                              {c.balance > 0 ? (
+                              {(c.balance ?? 0) > 0 ? (
                                 <span className={cn(
                                   "text-[9px] px-1.5 py-0.5 rounded font-black border",
                                   c.balanceType === 'credit' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
                                 )}>
-                                  {formatCurrency(c.balance)} {c.balanceType === 'credit' ? 'دائن' : 'مدين'}
+                                  {formatCurrency(c.balance ?? 0)} {c.balanceType === 'credit' ? 'دائن' : 'مدين'}
                                 </span>
                               ) : (
                                 <span className="text-[9px] text-slate-400 font-bold">رصيد: 0.00</span>
@@ -2028,14 +2028,14 @@ export default function POS() {
                     <p className="text-[9px] text-slate-400 font-bold leading-none mb-0.5">الرصيد المالي الحالي</p>
                     <p className={cn(
                       "text-xs font-black",
-                      selectedCustomer.balance === 0
+                      (selectedCustomer.balance ?? 0) === 0
                         ? "text-slate-500"
                         : selectedCustomer.balanceType === 'credit'
                         ? "text-emerald-600"
                         : "text-rose-600"
                     )}>
-                      {selectedCustomer.balance > 0
-                        ? `${formatCurrency(selectedCustomer.balance)} ${selectedCustomer.balanceType === 'credit' ? 'دائن' : 'مدين'}`
+                      {(selectedCustomer.balance ?? 0) > 0
+                        ? `${formatCurrency(selectedCustomer.balance ?? 0)} ${selectedCustomer.balanceType === 'credit' ? 'دائن' : 'مدين'}`
                         : '0.00 ج.م'
                       }
                     </p>
