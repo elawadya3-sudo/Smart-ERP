@@ -42,6 +42,7 @@ import PageToolbar from '../../components/ui/PageToolbar';
 import { Warehouse, User, Shift, Order, Customer, POSDevice, PrintTemplate, SecurityLog } from '../../types';
 import { useDesktop } from '../../context/DesktopIntegrationContext';
 import PosNavbar from '../../components/layout/PosNavbar';
+import PosBreadcrumbs from '../../components/layout/PosBreadcrumbs';
 
 export default function POSSettings() {
   const { user } = useAuth();
@@ -532,6 +533,7 @@ export default function POSSettings() {
 
   return (
     <div className="space-y-6 text-right pb-16" dir="rtl">
+      <PosBreadcrumbs />
       <PosNavbar />
       
       {/* HEADER SECTION */}

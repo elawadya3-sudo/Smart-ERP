@@ -25,6 +25,7 @@ import {
 } from '../../components/ui/ErpUI';
 import { motion, AnimatePresence } from 'motion/react';
 import PosNavbar from '../../components/layout/PosNavbar';
+import PosBreadcrumbs from '../../components/layout/PosBreadcrumbs';
 
 export default function PosCustomers() {
   const { user } = useAuth();
@@ -152,11 +153,11 @@ export default function PosCustomers() {
 
   return (
     <ErpPageLayout>
+      <PosBreadcrumbs />
       <PosNavbar />
       <ErpPageHeader
         title="إدارة عملاء نقاط البيع"
         description="إضافة وتعديل وحذف العملاء، وتحديث الأرصدة المدنية والدائنة للبيع الآجل."
-        breadcrumbs={[{ label: 'الرئيسية' }, { label: 'نقاط البيع' }, { label: 'إدارة العملاء' }]}
         actions={
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center">
             {/* Branch Selector for Admin */}

@@ -41,6 +41,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { usePOS } from '../context/POSContext';
 import PosNavbar from '../components/layout/PosNavbar';
+import PosBreadcrumbs from '../components/layout/PosBreadcrumbs';
 import { useDesktop } from '../context/DesktopIntegrationContext';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 import JsBarcode from 'jsbarcode';
@@ -1253,6 +1254,7 @@ export default function POS() {
 
   return (
     <div className="h-full space-y-4" dir="rtl">
+      <PosBreadcrumbs />
       <PosNavbar />
       {/* 1. Header Area - Matching Branch Management Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative">
