@@ -84,7 +84,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     if (path.startsWith('/inventory')) return 'inventory';
     if (path.startsWith('/accounting')) return 'accounting';
     if (path.startsWith('/customers')) return 'customers';
-    if (path.startsWith('/reports') || path.startsWith('/sales') || path.startsWith('/cash')) return 'reports';
+    if (path.startsWith('/sales') && path !== '/sales/history') return 'sales';
+    if (path.startsWith('/reports') || path.startsWith('/cash') || path === '/sales/history') return 'reports';
     if (path.startsWith('/settings')) return 'settings';
     if (path.startsWith('/branch-management')) return 'branchManagement';
     if (path.startsWith('/admin/cashiers')) return 'cashierManagement';
@@ -95,7 +96,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   // Check if the tenant allows this module/section
   if (tenant && tenant.allowedModules && requiredPermission) {
-    if (!tenant.allowedModules.includes(requiredPermission)) {
+    if (requiredPermission !== 'sales' && !tenant.allowedModules.includes(requiredPermission)) {
       return (
         <div className="h-screen w-screen flex items-center justify-center bg-gray-50 p-6" dir="rtl">
           <div className="max-w-md w-full bg-white rounded-[3rem] p-12 shadow-2xl border border-red-50 text-center space-y-8">
@@ -194,6 +195,30 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
         '/cash/reports':                      'reports_cash',
         '/sales/history':                     'reports_history',
         '/reports/center':                    'reports_center',
+        '/sales/basic/customers':            'sales_basic',
+        '/sales/basic/reps':                 'sales_basic',
+        '/sales/basic/services':             'sales_basic',
+        '/sales/basic/sales-show':           'sales_basic',
+        '/sales/basic/branches':             'sales_basic',
+        '/sales/basic/quotas':               'sales_basic',
+        '/sales/basic/targets':              'sales_basic',
+        '/sales/basic/incentives':           'sales_basic',
+        '/sales/basic/price-lists':          'sales_basic',
+        '/sales/config/customer-settings':   'sales_config',
+        '/sales/config/settings':            'sales_config',
+        '/sales/docs/order':                 'sales_docs',
+        '/sales/docs/return':                'sales_docs',
+        '/sales/docs/recurring':             'sales_docs',
+        '/sales/docs/quotations':            'sales_docs',
+        '/sales/approvals/general':          'sales_approvals',
+        '/sales/approvals/returns':          'sales_approvals',
+        '/sales/approvals/deliveries':       'sales_approvals',
+        '/sales/reports/orders':             'sales_reports',
+        '/sales/reports/sales':              'sales_reports',
+        '/sales/reports/profit':             'sales_reports',
+        '/sales/reports/customer-eval':      'sales_reports',
+        '/sales/reports/target':             'sales_reports',
+        '/sales/reports/periods':            'sales_reports',
       };
 
       // All granular sub-keys that belong to each master section
@@ -211,6 +236,9 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
         ],
         reports: [
           'reports', 'reports_cash', 'reports_history', 'reports_center',
+        ],
+        sales: [
+          'sales', 'sales_basic', 'sales_config', 'sales_docs', 'sales_approvals', 'sales_reports',
         ],
       };
 

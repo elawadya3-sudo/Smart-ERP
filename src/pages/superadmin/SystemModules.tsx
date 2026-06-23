@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   ShoppingCart, Package, Briefcase, BarChart3, Users, Settings,
   Building2, LayoutDashboard, CheckCircle2, XCircle, Shield,
-  Loader2, Save
+  Loader2, Save, Coins
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -22,6 +22,7 @@ const SYSTEM_MODULES: SystemModule[] = [
   { id: 'branchManagement',  name: 'إدارة الفرع',           description: 'إدارة الفروع والعمليات اليومية',       icon: Building2, color: 'purple' },
   { id: 'cashierManagement', name: 'إدارة الكاشيرين',       description: 'إنشاء حسابات الكاشير وإدارتهم',        icon: Users, color: 'violet' },
   { id: 'inventory',         name: 'إدارة المخازن',          description: 'مستودعات، توريد، جرد، تحويلات',        icon: Package, color: 'green' },
+  { id: 'sales',             name: 'إدارة المبيعات',         description: 'عروض أسعار، أوامر بيع، مرتجعات، عملاء، تقارير مبيعية', icon: Coins, color: 'blue' },
   { id: 'accounting',        name: 'الإدارة المالية',         description: 'محاسبة، قيود يومية، مراكز تكلفة',      icon: Briefcase, color: 'amber' },
   { id: 'customers',         name: 'إدارة العملاء',           description: 'بيانات العملاء، النقاط، الرصيد',       icon: Users, color: 'pink' },
   { id: 'reports',           name: 'مركز التقارير',          description: 'تقارير المبيعات والمخزون والكاش',      icon: BarChart3, color: 'cyan' },

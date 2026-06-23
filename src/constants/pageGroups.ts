@@ -87,6 +87,21 @@ export const pageGroups = [
     ]
   },
   {
+    id: 'sales',
+    label: 'إدارة المبيعات',
+    icon: Coins,
+    color: 'blue',
+    masterKey: 'sales',
+    pages: [
+      { key: 'sales', label: 'لوحة المبيعات', desc: 'ملخص وإحصائيات أداء المبيعات', icon: LayoutDashboard },
+      { key: 'sales_basic', label: 'بيانات أساسية مبيعات', desc: 'العملاء، المندوبين، الخدمات، قوائم الأسعار، فروع المبيعات، مستهدفات وحوافز البيع', icon: Users },
+      { key: 'sales_config', label: 'ضبط إعدادات المبيعات', desc: 'ضبط لوائح وسياسات وضوابط العملاء والبيع', icon: Settings },
+      { key: 'sales_docs', label: 'مستندات المبيعات', desc: 'أمر البيع، المرتجعات، عروض الأسعار، الدوري', icon: FileText },
+      { key: 'sales_approvals', label: 'تصديقات المبيعات', desc: 'اعتماد المبيعات والمرتجع وتسليم البضاعة', icon: ShieldCheck },
+      { key: 'sales_reports', label: 'تقارير المبيعات المتقدمة', desc: 'تقارير الأرباح والمقارنات والتقييمات', icon: BarChart3 },
+    ]
+  },
+  {
     id: 'system',
     label: 'النظام والتقارير',
     icon: Settings,

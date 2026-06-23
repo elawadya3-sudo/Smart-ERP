@@ -20,6 +20,7 @@ const AVAILABLE_MODULES = [
   { id: 'dashboard', label: 'لوحة التحكم' },
   { id: 'pos', label: 'نقطة البيع' },
   { id: 'inventory', label: 'إدارة المخازن' },
+  { id: 'sales', label: 'المبيعات' },
   { id: 'accounting', label: 'الإدارة المالية' },
   { id: 'customers', label: 'العملاء' },
   { id: 'reports', label: 'التقارير' },

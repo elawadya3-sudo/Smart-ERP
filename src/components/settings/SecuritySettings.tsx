@@ -56,6 +56,7 @@ const MODULES = [
   { id: 'dashboard', label: 'لوحة التحكم', icon: Shield },
   { id: 'pos', label: 'نقطة البيع', icon: Shield },
   { id: 'inventory', label: 'إدارة المخازن', icon: Shield },
+  { id: 'sales', label: 'المبيعات', icon: Shield },
   { id: 'accounting', label: 'الإدارة المالية', icon: Shield },
   { id: 'customers', label: 'العملاء', icon: Shield },
   { id: 'reports', label: 'التقارير', icon: Shield },
@@ -106,6 +107,13 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
   reports_cash: true,
   reports_history: true,
   reports_center: true,
+  // Granular sales sub-pages
+  sales: true,
+  sales_basic: true,
+  sales_config: true,
+  sales_docs: true,
+  sales_approvals: true,
+  sales_reports: true,
 };
 
 const ROLES = [
@@ -158,6 +166,12 @@ const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
     reports_cash: true,
     reports_history: true,
     reports_center: true,
+    sales: true,
+    sales_basic: true,
+    sales_config: true,
+    sales_docs: true,
+    sales_approvals: true,
+    sales_reports: true,
   },
   BRANCH_MANAGER: {
     dashboard: true,
@@ -797,12 +811,12 @@ export default function SecuritySettings() {
                        <button
                          type="button"
                          onClick={() => {
-                           // Toggle all permissions
                            const allKeys = [
                              'dashboard', 'pos', 'adminPos', 'inventory', 'accounting', 'customers', 'reports', 'settings', 'branchManagement', 'cashierManagement', 'systemReset',
                              'inventory_products', 'inventory_units', 'inventory_itemmap', 'inventory_warehouses', 'inventory_receipt', 'inventory_salesreturns', 'inventory_purchasereturns', 'inventory_issue', 'inventory_branchtransfer', 'inventory_transfers', 'inventory_opening', 'inventory_stocktaking', 'inventory_approval', 'inventory_payable', 'inventory_reports',
                              'accounting_chart', 'accounting_costcenters', 'accounting_currencies', 'accounting_checkstages', 'accounting_taxes', 'accounting_journal', 'accounting_cash',
-                             'reports_cash', 'reports_history', 'reports_center'
+                             'reports_cash', 'reports_history', 'reports_center',
+                             'sales', 'sales_basic', 'sales_config', 'sales_docs', 'sales_approvals', 'sales_reports'
                            ];
                            const anyTrue = allKeys.some(k => (formData.permissions as any)[k]);
                            const nextVal = !anyTrue;

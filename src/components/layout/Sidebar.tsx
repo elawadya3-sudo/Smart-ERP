@@ -177,6 +177,7 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const isModuleAllowed = (moduleId: string): boolean => {
     if (!tenant) return true;
     if (!tenant.allowedModules) return true;
+    if (moduleId === 'sales') return true;
     return tenant.allowedModules.includes(moduleId);
   };
 
