@@ -24,6 +24,7 @@ import {
   ErpInput
 } from '../../components/ui/ErpUI';
 import { motion, AnimatePresence } from 'motion/react';
+import PosNavbar from '../../components/layout/PosNavbar';
 
 export default function PosCustomers() {
   const { user } = useAuth();
@@ -151,6 +152,7 @@ export default function PosCustomers() {
 
   return (
     <ErpPageLayout>
+      <PosNavbar />
       <ErpPageHeader
         title="إدارة عملاء نقاط البيع"
         description="إضافة وتعديل وحذف العملاء، وتحديث الأرصدة المدنية والدائنة للبيع الآجل."

@@ -41,6 +41,7 @@ import { formatCurrency, cn } from '../../lib/utils';
 import PageToolbar from '../../components/ui/PageToolbar';
 import { Warehouse, User, Shift, Order, Customer, POSDevice, PrintTemplate, SecurityLog } from '../../types';
 import { useDesktop } from '../../context/DesktopIntegrationContext';
+import PosNavbar from '../../components/layout/PosNavbar';
 
 export default function POSSettings() {
   const { user } = useAuth();
@@ -531,6 +532,7 @@ export default function POSSettings() {
 
   return (
     <div className="space-y-6 text-right pb-16" dir="rtl">
+      <PosNavbar />
       
       {/* HEADER SECTION */}
       <PageToolbar
@@ -594,7 +596,7 @@ export default function POSSettings() {
             onClick={() => setActiveTab(t.id as any)}
             className={cn(
               "px-5 py-3 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95",
-              activeTab === t.id ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+              activeTab === t.id ? "bg-[var(--color-primary)] text-white shadow-md shadow-[var(--color-primary)]/20" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             )}
           >
             <t.icon className="w-4 h-4" />
@@ -607,7 +609,7 @@ export default function POSSettings() {
       <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-sm min-h-[400px]">
         {loading || settingsLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+            <Loader2 className="w-10 h-10 text-[var(--color-primary)] animate-spin" />
             <span className="text-xs text-slate-400 font-bold">جاري مزامنة بيانات النظام...</span>
           </div>
         ) : (
@@ -622,7 +624,7 @@ export default function POSSettings() {
                   </div>
                   <button
                     onClick={() => handleOpenDeviceModal()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 px-4 text-xs font-black flex items-center gap-1.5 transition-all"
+                    className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl py-2.5 px-4 text-xs font-black flex items-center gap-1.5 transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     إضافة جهاز POS جديد

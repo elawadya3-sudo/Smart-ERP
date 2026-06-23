@@ -49,6 +49,7 @@ import { Order, Warehouse, User, Product, Shift, Customer } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import PageToolbar from '../../components/ui/PageToolbar';
+import PosNavbar from '../../components/layout/PosNavbar';
 import { useBranchFilter } from '../../hooks/useBranchFilter';
 import { useAuth } from '../../context/AuthContext';
 import { FilterTemplateManager } from '../../utils/FilterTemplateManager';
@@ -1081,6 +1082,9 @@ export default function POSReports() {
 
   return (
     <div className={cn("space-y-5 text-right pb-16 transition-all duration-300", isPrintPreview && "print:bg-white print:p-0")} dir="rtl">
+      <div className="no-print">
+        <PosNavbar />
+      </div>
       
       {/* Print styles */}
       <style>{`

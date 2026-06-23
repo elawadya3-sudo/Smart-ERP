@@ -40,6 +40,7 @@ import { db } from '../lib/firebase';
 import { useSearchParams } from 'react-router-dom';
 
 import { usePOS } from '../context/POSContext';
+import PosNavbar from '../components/layout/PosNavbar';
 import { useDesktop } from '../context/DesktopIntegrationContext';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 import JsBarcode from 'jsbarcode';
@@ -1251,7 +1252,8 @@ export default function POS() {
   };
 
   return (
-    <div className="h-full space-y-8" dir="rtl">
+    <div className="h-full space-y-4" dir="rtl">
+      <PosNavbar />
       {/* 1. Header Area - Matching Branch Management Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-20"></div>
