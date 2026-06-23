@@ -31,6 +31,30 @@ service cloud.firestore {
       return isSignedIn() && (data.role == 'CASHIER' || data.role == 'employee');
     }
 
+    function isManagerOrAdmin() {
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && (
+        data.role in ['ADMIN', 'admin', 'BRANCH_MANAGER', 'ACCOUNTANT'] ||
+        request.auth.token.email == 'master@system.local' ||
+        (data.keys().hasAll(['isRoot']) && data.isRoot == true)
+      );
+    }
+
+    function hasCashierManagement() {
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && (
+        data.role in ['ADMIN', 'admin'] ||
+        (
+          data.role in ['BRANCH_MANAGER', 'ACCOUNTANT'] &&
+          data.keys().hasAll(['permissions']) &&
+          data.permissions.keys().hasAll(['cashierManagement']) &&
+          data.permissions.cashierManagement == true
+        ) ||
+        request.auth.token.email == 'master@system.local' ||
+        (data.keys().hasAll(['isRoot']) && data.isRoot == true)
+      );
+    }
+
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
@@ -46,22 +70,21 @@ service cloud.firestore {
       function isValidUser(data) {
         return data.uid is string && 
                data.email is string && data.email.size() <= 200 &&
-               data.role in ['ADMIN', 'CASHIER', 'admin', 'employee'] &&
+               data.role in ['ADMIN', 'CASHIER', 'admin', 'employee', 'BRANCH_MANAGER', 'ACCOUNTANT', 'SALES', 'PURCHASES', 'HR'] &&
                data.keys().hasAll(['uid', 'email', 'role']) &&
                data.keys().size() >= 3;
       }
 
-      // Users can read themselves. Admins can read everyone.
-      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow list: if isAdmin();
+      // All authenticated users can read users (managers/cashiers need to list users, select cashiers, etc.)
+      allow read: if isSignedIn();
       
-      // Only admins or the user themselves (initial creation) can create/write.
-      // In practice, admin creates cashiers.
-      allow create: if isSignedIn() && (isAdmin() || request.auth.uid == userId) && isValidId(userId) && isValidUser(incoming());
+      // Only admins, the user themselves, or managers/accountants with cashierManagement permission can create.
+      allow create: if isSignedIn() && (hasCashierManagement() || request.auth.uid == userId) && isValidId(userId) && isValidUser(incoming());
       
-      allow update: if isSignedIn() && (isAdmin() || request.auth.uid == userId) && isValidId(userId) && 
+      // Only admins, the user themselves, or managers/accountants with cashierManagement permission can update.
+      allow update: if isSignedIn() && (hasCashierManagement() || request.auth.uid == userId) && isValidId(userId) && 
                       incoming().uid == existing().uid &&
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'role', 'branchId', 'isActive', 'createdAt', 'permissions']) && 
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'role', 'branchId', 'allowedBranches', 'isActive', 'createdAt', 'permissions']) && 
                        (incoming().role == existing().role || isAdmin()));
       
       allow delete: if isAdmin();
@@ -70,14 +93,27 @@ service cloud.firestore {
     // SHIFTS
     match /shifts/{shiftId} {
       function isValidShift(data) {
-        return (data.cashierId == request.auth.uid || isAdmin()) &&
-               data.branchId is string &&
-               data.status in ['OPEN', 'CLOSED'];
+        let uData = getUserData(request.auth.uid);
+        return (
+          data.cashierId == request.auth.uid || 
+          uData.role in ['ADMIN', 'admin', 'ACCOUNTANT'] ||
+          (uData.role == 'BRANCH_MANAGER' && uData.branchId == data.branchId)
+        ) &&
+        data.branchId is string &&
+        data.status in ['OPEN', 'CLOSED'];
       }
       
-      allow read: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isAdmin());
+      allow read: if isSignedIn() && (
+        resource.data.cashierId == request.auth.uid ||
+        getUserData(request.auth.uid).role in ['ADMIN', 'admin', 'ACCOUNTANT'] ||
+        (getUserData(request.auth.uid).role == 'BRANCH_MANAGER' && getUserData(request.auth.uid).branchId == resource.data.branchId)
+      );
       allow create: if isSignedIn() && isValidShift(incoming());
-      allow update: if isSignedIn() && (resource.data.cashierId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        resource.data.cashierId == request.auth.uid ||
+        getUserData(request.auth.uid).role in ['ADMIN', 'admin', 'ACCOUNTANT'] ||
+        (getUserData(request.auth.uid).role == 'BRANCH_MANAGER' && getUserData(request.auth.uid).branchId == resource.data.branchId)
+      );
       allow delete: if isAdmin();
     }
 
@@ -234,5 +270,24 @@ service cloud.firestore {
 
     // --- ACTIVITY LOGS (سجل النشاط والتدقيق) ---
     match /activity_logs/{id} { allow read, create: if isSignedIn(); allow update, delete: if isAdmin(); }
+
+    // --- POS DEVICES ---
+    match /pos_devices/{id} {
+      allow read: if isSignedIn();
+      allow write: if isManagerOrAdmin();
+    }
+
+    // --- PRINT TEMPLATES ---
+    match /print_templates/{id} {
+      allow read: if isSignedIn();
+      allow write: if isManagerOrAdmin();
+    }
+
+    // --- SECURITY LOGS ---
+    match /security_logs/{id} {
+      allow create: if isSignedIn();
+      allow read: if isManagerOrAdmin();
+      allow update, delete: if isAdmin();
+    }
   }
 }

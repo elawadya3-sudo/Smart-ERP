@@ -86,26 +86,46 @@ export default function Navbar({ onMenuClick, onSearchClick }: NavbarProps) {
     }
   };
 
+  const allowedBranchIds = useMemo(() => {
+    if (user?.role === 'CASHIER') {
+      const uAllowed = (user as any).allowedBranches || [];
+      if (uAllowed.length > 0) {
+        return uAllowed.includes(user.branchId) ? uAllowed : [...uAllowed, user.branchId].filter(Boolean);
+      }
+      return user.branchId ? [user.branchId] : [];
+    }
+    return [];
+  }, [user]);
+
   const filteredProducts = useMemo(() => {
-    if (searchQuery.trim() === '*') return products;
+    let list = products;
+    if (user?.role === 'CASHIER') {
+      list = products.filter(p => !p.warehouseId || p.warehouseId === '1' || allowedBranchIds.includes(p.warehouseId));
+    }
+    if (searchQuery.trim() === '*') return list;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return [];
-    return products.filter(p => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || (p.barcode && String(p.barcode).includes(q)));
-  }, [products, searchQuery]);
+    return list.filter(p => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || (p.barcode && String(p.barcode).includes(q)));
+  }, [products, searchQuery, user, allowedBranchIds]);
 
   const filteredCustomers = useMemo(() => {
-    if (searchQuery.trim() === '*') return customers;
+    let list = customers;
+    if (user?.role === 'CASHIER') {
+      list = customers.filter(c => c.branchId && allowedBranchIds.includes(c.branchId));
+    }
+    if (searchQuery.trim() === '*') return list;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return [];
-    return customers.filter(c => c.name?.toLowerCase().includes(q) || c.phone?.includes(q));
-  }, [customers, searchQuery]);
+    return list.filter(c => c.name?.toLowerCase().includes(q) || c.phone?.includes(q));
+  }, [customers, searchQuery, user, allowedBranchIds]);
 
   const filteredSuppliers = useMemo(() => {
+    if (user?.role === 'CASHIER') return [];
     if (searchQuery.trim() === '*') return suppliers;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return [];
     return suppliers.filter(s => s.name?.toLowerCase().includes(q) || s.phone?.includes(q) || s.company?.toLowerCase().includes(q));
-  }, [suppliers, searchQuery]);
+  }, [suppliers, searchQuery, user]);
 
   useEffect(() => {
     const qW = query(collection(db, 'warehouses'));

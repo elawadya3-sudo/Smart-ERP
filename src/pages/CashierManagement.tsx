@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { pageGroups } from '../constants/pageGroups';
 import { 
   Users, 
   Edit2, 
@@ -75,10 +76,12 @@ export default function CashierManagement() {
     email: '',
     password: '',
     branchId: '',
+    allowedBranches: [] as string[],
     role: 'CASHIER' as const,
     isActive: true,
     permissions: { ...defaultPermissions }
   });
+
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     pos: true,
@@ -90,84 +93,6 @@ export default function CashierManagement() {
   const toggleGroup = (group: string) => {
     setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
   };
-
-  // Page groups definition - each group has a master permission key and sub-pages
-  const pageGroups = [
-    {
-      id: 'pos',
-      label: 'نقاط البيع',
-      icon: ShoppingCart,
-      color: 'blue',
-      masterKey: 'pos',
-      pages: [
-        { key: 'pos', label: 'نقطة البيع (POS)', desc: 'إجراء عمليات البيع للكاشير', icon: ShoppingCart },
-        { key: 'adminPos', label: 'POS للمدير — إدارة', desc: 'شاشة البيع الإدارية مع كل الصلاحيات', icon: ShieldCheck },
-        { key: 'branchManagement', label: 'إدارة الفرع', desc: 'متابعة إحصائيات وأداء الفرع', icon: LayoutDashboard },
-        { key: 'cashierManagement', label: 'إدارة الكاشير', desc: 'إدارة الموظفين وصلاحياتهم', icon: ShieldCheck },
-        { key: 'pos_make_return', label: 'عمل مرتجع للفاتورة', desc: 'السماح للكاشير بعمل مرتجع للفواتير المكتملة', icon: ArrowRightLeft },
-        { key: 'pos_delete_invoice', label: 'إلغاء/حذف الفاتورة المعلقة', desc: 'السماح للكاشير بإلغاء أو حذف الفواتير المعلقة', icon: Trash2 },
-      ]
-    },
-    {
-      id: 'inventory',
-      label: 'المخازن والمستودعات',
-      icon: WarehouseIcon,
-      color: 'orange',
-      masterKey: 'inventory',
-      pages: [
-        { key: 'inventory', label: 'لوحة المخزون', desc: 'ملخص وإحصائيات المخزن', icon: LayoutDashboard },
-        { key: 'inventory_products', label: 'الأصناف', desc: 'إدارة قائمة الأصناف', icon: Package },
-        { key: 'inventory_units', label: 'وحدات القياس', desc: 'إدارة وحدات الوزن والعدد', icon: Box },
-        { key: 'inventory_itemmap', label: 'خريطة الأصناف', desc: 'تصنيف وتخطيط الأصناف', icon: Layers },
-        { key: 'inventory_warehouses', label: 'المستودعات', desc: 'إدارة المستودعات والفروع', icon: Building2 },
-        { key: 'inventory_receipt', label: 'توريد بضاعة', desc: 'استلام البضائع الواردة', icon: ArrowDownLeft },
-        { key: 'inventory_salesreturns', label: 'مردودات مبيعات', desc: 'إرجاع البضائع المباعة', icon: ArrowRightLeft },
-        { key: 'inventory_transfer_receipt', label: 'استلام تحويل بضاعة', desc: 'تأكيد استلام البضائع المحولة', icon: ArrowDownLeft },
-        { key: 'inventory_purchasereturns', label: 'مردودات مشتريات', desc: 'إرجاع المشتريات للموردين', icon: ArrowDownLeft },
-        { key: 'inventory_issue', label: 'صرف بضاعة', desc: 'صرف البضائع من المخزن', icon: Database },
-        { key: 'inventory_branchtransfer', label: 'طلب تحويل بضاعة', desc: 'طلبات نقل البضائع بين الفروع', icon: ArrowRightLeft },
-        { key: 'inventory_transfers', label: 'تحويل بضاعة', desc: 'تنفيذ التحويلات بين المستودعات', icon: ArrowRightLeft },
-        { key: 'inventory_opening', label: 'الرصيد الافتتاحي', desc: 'ضبط الأرصدة الأولية', icon: FileText },
-        { key: 'inventory_stocktaking', label: 'جرد المخزون', desc: 'حصر وإعادة تقييم المخزون', icon: HistoryIcon },
-        { key: 'inventory_approval', label: 'تصديقات المخازن', desc: 'اعتماد حركات المخزون', icon: ShieldCheck },
-        { key: 'inventory_payable', label: 'الحسابات الدائنة', desc: 'حسابات الموردين والديون', icon: Wallet },
-        { key: 'inventory_reports', label: 'تقارير المخزون', desc: 'تقارير الحركة والمخزون', icon: BarChart3 },
-      ]
-    },
-    {
-      id: 'accounting',
-      label: 'الحسابات والمالية',
-      icon: Briefcase,
-      color: 'purple',
-      masterKey: 'accounting',
-      pages: [
-        { key: 'accounting', label: 'لوحة الحسابات', desc: 'ملخص ومتابعة الحسابات', icon: Briefcase },
-        { key: 'accounting_chart', label: 'دليل الحسابات', desc: 'شجرة الحسابات المالية', icon: FolderTree },
-        { key: 'accounting_costcenters', label: 'مراكز التكلفة', desc: 'إدارة مراكز التكلفة', icon: Building2 },
-        { key: 'accounting_currencies', label: 'العملات', desc: 'إدارة العملات وأسعار الصرف', icon: Coins },
-        { key: 'accounting_checkstages', label: 'مراحل الشيكات', desc: 'متابعة دورة حياة الشيكات', icon: ScrollText },
-        { key: 'accounting_taxes', label: 'الضرائب', desc: 'إعداد نسب الضرائب والرسوم', icon: Percent },
-        { key: 'accounting_journal', label: 'قيود اليومية', desc: 'إدخال القيود المحاسبية', icon: FileText },
-        { key: 'accounting_cash', label: 'النقدية والصيرفة', desc: 'إدارة حركات النقد والصرافة', icon: Wallet },
-      ]
-    },
-    {
-      id: 'system',
-      label: 'النظام والتقارير',
-      icon: Settings,
-      color: 'slate',
-      masterKey: 'reports',
-      pages: [
-        { key: 'dashboard', label: 'لوحة التحكم الرئيسية', desc: 'إحصائيات وملخص النظام', icon: LayoutDashboard },
-        { key: 'customers', label: 'إدارة العملاء', desc: 'بيانات العملاء وحساباتهم', icon: Users },
-        { key: 'reports', label: 'تقارير المبيعات', desc: 'سجلات المبيعات والأداء', icon: BarChart3 },
-        { key: 'reports_cash', label: 'تقارير الكاش والشفتات', desc: 'تقارير الصناديق ونهاية اليوم', icon: Banknote },
-        { key: 'reports_history', label: 'سجل المبيعات (History)', desc: 'تاريخ كامل لعمليات البيع', icon: HistoryIcon },
-        { key: 'reports_center', label: 'مركز التقارير الموحد', desc: 'جميع التقارير في مكان واحد', icon: BarChart3 },
-        { key: 'settings', label: 'إعدادات النظام', desc: 'إعدادات الشركة والطباعة', icon: Settings },
-      ]
-    },
-  ];
 
   const getAvatarGradient = (name: string) => {
     const colors = [
@@ -268,6 +193,7 @@ export default function CashierManagement() {
         email: formData.email.includes('@') ? formData.email : `${formData.email}@system.local`,
         role: 'CASHIER' as const,
         branchId: formData.branchId,
+        allowedBranches: formData.allowedBranches || [],
         isActive: formData.isActive,
         permissions: formData.permissions,
         createdAt: selectedCashier?.createdAt || new Date().toISOString()
@@ -282,6 +208,7 @@ export default function CashierManagement() {
         email: '', 
         password: '', 
         branchId: '', 
+        allowedBranches: [],
         role: 'CASHIER', 
         isActive: true, 
         permissions: { ...defaultPermissions } 
@@ -332,6 +259,7 @@ export default function CashierManagement() {
             email: '', 
             password: '', 
             branchId: '', 
+            allowedBranches: [],
             role: 'CASHIER', 
             isActive: true, 
             permissions: { ...defaultPermissions } 
@@ -450,9 +378,24 @@ export default function CashierManagement() {
                           </div>
                        </td>
                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-2 text-slate-600">
-                             <Building2 className="w-4 h-4 text-slate-400" />
-                             <span className="text-sm font-bold">{getBranchName(c.branchId || '')}</span>
+                          <div className="flex flex-col gap-1 text-right">
+                             <div className="flex items-center gap-2 text-slate-700">
+                                <Building2 className="w-4 h-4 text-blue-500" />
+                                <span className="text-sm font-black">{getBranchName(c.branchId || '')}</span>
+                             </div>
+                             {c.allowedBranches && c.allowedBranches.filter((id: string) => id !== c.branchId).length > 0 && (
+                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                 <span className="text-[9px] text-slate-400 font-black">إضافي:</span>
+                                 {c.allowedBranches
+                                   .filter((id: string) => id !== c.branchId)
+                                   .map((id: string) => (
+                                     <span key={id} className="text-[9px] bg-slate-50 text-slate-500 border border-slate-200/50 px-1.5 py-0.5 rounded font-bold">
+                                       {getBranchName(id)}
+                                     </span>
+                                   ))
+                                 }
+                               </div>
+                             )}
                           </div>
                        </td>
                        <td className="px-6 py-5">
@@ -487,6 +430,7 @@ export default function CashierManagement() {
                                    email: c.email,
                                    password: '',
                                    branchId: c.branchId || '',
+                                   allowedBranches: c.allowedBranches || [],
                                    role: 'CASHIER',
                                    isActive: c.isActive !== false,
                                    permissions: c.permissions ? { ...defaultPermissions, ...c.permissions } : { ...defaultPermissions }
@@ -621,6 +565,56 @@ export default function CashierManagement() {
                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-4 text-slate-400">
                              <ChevronDown className="w-4 h-4" />
                            </div>
+                         </div>
+                      </div>
+
+                      {/* Additional Allowed Branches */}
+                      <div className="space-y-2 sm:col-span-2 bg-slate-50/50 p-4 rounded-2xl border border-slate-100/80">
+                         <label className="text-xs font-black text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                            نقاط البيع والمستودعات الإضافية المتاحة للكاشير
+                         </label>
+                         <p className="text-[10px] text-slate-400 font-bold mb-2">
+                           يستطيع الكاشير البيع من مخزون هذه الفروع بشكل مجمع في فاتورة واحدة
+                         </p>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                           {branches.map(b => {
+                             const isPrimary = b.id === formData.branchId;
+                             const isChecked = formData.allowedBranches?.includes(b.id) || isPrimary;
+                             
+                             return (
+                               <label
+                                 key={b.id}
+                                 className={cn(
+                                   "flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all select-none cursor-pointer text-xs font-bold",
+                                   isChecked 
+                                     ? "bg-white border-blue-100 shadow-sm text-blue-600"
+                                     : "bg-white/40 border-transparent text-slate-600 hover:border-slate-200"
+                                 )}
+                               >
+                                 <input
+                                   type="checkbox"
+                                   disabled={isPrimary}
+                                   checked={isChecked}
+                                   onChange={(e) => {
+                                     const checked = e.target.checked;
+                                     setFormData(prev => {
+                                       const allowed = prev.allowedBranches || [];
+                                       const updated = checked 
+                                         ? [...allowed, b.id]
+                                         : allowed.filter(id => id !== b.id);
+                                       return { ...prev, allowedBranches: updated };
+                                     });
+                                   }}
+                                   className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-100 cursor-pointer disabled:opacity-50"
+                                 />
+                                 <span>
+                                   {b.name}
+                                   {isPrimary && <span className="text-[10px] text-slate-400 mr-1.5">(الفرع الأساسي)</span>}
+                                 </span>
+                               </label>
+                             );
+                           })}
                          </div>
                       </div>
                    </div>

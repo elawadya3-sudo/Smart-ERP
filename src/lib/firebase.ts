@@ -1,6 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  doc, 
+  getDocFromServer 
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -22,8 +28,19 @@ const OVERRIDE_DB = !isSuperAdminRoute ? (overrideDbFromUrl || overrideDbFromSes
 export const FIRESTORE_DB_ID = (OVERRIDE_DB && OVERRIDE_DB.length > 0)
   ? OVERRIDE_DB
   : MAIN_FIRESTORE_DB_ID;
-export const db = getFirestore(app, FIRESTORE_DB_ID);
-export const mainDb = FIRESTORE_DB_ID === MAIN_FIRESTORE_DB_ID ? db : getFirestore(app, MAIN_FIRESTORE_DB_ID);
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, FIRESTORE_DB_ID);
+
+export const mainDb = FIRESTORE_DB_ID === MAIN_FIRESTORE_DB_ID 
+  ? db 
+  : initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      })
+    }, MAIN_FIRESTORE_DB_ID);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 

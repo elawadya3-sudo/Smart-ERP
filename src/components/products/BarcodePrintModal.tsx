@@ -11,12 +11,14 @@ interface BarcodePrintModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedProducts: Product[];
+  allProducts?: Product[];
 }
 
 export default function BarcodePrintModal({
   isOpen,
   onClose,
   selectedProducts,
+  allProducts: allProductsProp,
 }: BarcodePrintModalProps) {
   const { settings } = useMainStoreSettings();
   const [labelSize, setLabelSize] = useState<'38x25' | '50x30' | 'A4_40'>('38x25');
@@ -35,16 +37,22 @@ export default function BarcodePrintModal({
 
   // Load all products for the search dropdown
   useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const data = await productsService.getAll();
-        setAllProducts(data);
-      } catch (err) {
-        console.error('Failed to load products in modal:', err);
-      }
-    };
-    loadProducts();
-  }, []);
+    if (!isOpen) return;
+    
+    if (allProductsProp && allProductsProp.length > 0) {
+      setAllProducts(allProductsProp);
+    } else {
+      const loadProducts = async () => {
+        try {
+          const data = await productsService.getAll();
+          setAllProducts(data);
+        } catch (err) {
+          console.error('Failed to load products in modal:', err);
+        }
+      };
+      loadProducts();
+    }
+  }, [isOpen, allProductsProp]);
 
   // Sync prop products with local state when modal opens
   useEffect(() => {

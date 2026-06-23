@@ -29,8 +29,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { productsService, ordersService } from '../services/firestore';
-import { Product, OrderItem, StockLevel, Order, Warehouse, InventoryTransaction, Customer, ProductVariant } from '../types';
+import { Product, OrderItem, StockLevel, Order, Warehouse, InventoryTransaction, Customer, ProductVariant, PrintTemplate } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import { printReceiptHelper } from '../lib/receiptPrinter';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useAuth } from '../context/AuthContext';
@@ -39,14 +40,40 @@ import { db } from '../lib/firebase';
 import { useSearchParams } from 'react-router-dom';
 
 import { usePOS } from '../context/POSContext';
+import { useDesktop } from '../context/DesktopIntegrationContext';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 import JsBarcode from 'jsbarcode';
 
 export default function POS() {
   const { user } = useAuth();
   const { getOpenShift, openShift, closeShift, addInvoice, updateInvoice, deleteInvoice, invoices: contextInvoices, requestBranchTransfer } = usePOS();
+  const { isOnline, isSyncing, isElectron } = useDesktop();
   const { settings } = useMainStoreSettings();
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [activeBranchIds, setActiveBranchIds] = useState<string[]>([]);
+
+  // Memoize allowed branch IDs for cashiers (consolidated mode)
+  const allowedBranchIds = React.useMemo(() => {
+    if (user?.role === 'CASHIER') {
+      const uAllowed = (user as any).allowedBranches || [];
+      if (uAllowed.length > 0) {
+        return uAllowed.includes(user.branchId) ? uAllowed : [...uAllowed, user.branchId].filter(Boolean);
+      }
+      return user.branchId ? [user.branchId] : [];
+    }
+    return selectedBranchId ? [selectedBranchId] : [];
+  }, [user, selectedBranchId]);
+
+  // Sync activeBranchIds when allowedBranchIds or selectedBranchId changes
+  useEffect(() => {
+    if (allowedBranchIds.length > 0) {
+      setActiveBranchIds(allowedBranchIds);
+    } else if (selectedBranchId) {
+      setActiveBranchIds([selectedBranchId]);
+    } else {
+      setActiveBranchIds([]);
+    }
+  }, [allowedBranchIds, selectedBranchId]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -87,6 +114,7 @@ export default function POS() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [showIncomingRequestsModal, setShowIncomingRequestsModal] = useState(false);
   const isFirstLoad = React.useRef(true);
+  const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
 
   // Customer Selector State
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -114,6 +142,14 @@ export default function POS() {
       setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
     });
     return () => unsubC();
+  }, []);
+
+  // Fetch Print Templates
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'print_templates'), (snapshot) => {
+      setPrintTemplates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrintTemplate)));
+    });
+    return () => unsub();
   }, []);
 
   // Sync default customer
@@ -157,149 +193,20 @@ export default function POS() {
   }, [selectedDetail]);
 
   const handlePrintReceipt = (inv: Order) => {
-    const printWindow = window.open('', '_blank', 'width=450,height=600');
-    if (!printWindow) {
-      alert('تم منع فتح النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة.');
-      return;
-    }
-
     const customer = customers.find(c => c.id === inv.customerId);
+    const cashierName = user?.name || 'نظام البيع';
+    const electronAPI = (window as any).electronAPI;
 
-    const itemsHtml = (inv.items || []).map(item => `
-      <tr style="border-bottom: 1px dashed #eee;">
-        <td style="padding: 6px 0; text-align: right; font-weight: bold;">${item.name}</td>
-        <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
-        <td style="padding: 6px 0; text-align: left;">${formatCurrency(item.price)}</td>
-      </tr>
-    `).join('');
-
-    const content = `
-      <!DOCTYPE html>
-      <html dir="rtl">
-      <head>
-        <meta charset="utf-8">
-        <title>فاتورة مبسطة - ${inv.id}</title>
-        <style>
-          @page { size: 80mm auto; margin: 0; }
-          body { 
-            font-family: 'Cairo', system-ui, -apple-system, sans-serif; 
-            margin: 0; 
-            padding: 8mm 5mm; 
-            width: 70mm; 
-            font-size: 11px; 
-            line-height: 1.4; 
-            color: #000;
-          }
-          .text-center { text-align: center; }
-          .bold { font-weight: bold; }
-          .header { margin-bottom: 6mm; }
-          .store-name { font-size: 16px; font-weight: 900; margin: 0 0 2mm 0; }
-          .divider { border-top: 1px dashed #000; margin: 4mm 0; }
-          table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 11px; }
-          .total-row { font-size: 12px; font-weight: 900; }
-          .barcode-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 6mm; }
-          .barcode-container svg { max-width: 60mm; height: auto; }
-          .footer-note { font-size: 9px; margin-top: 4mm; text-align: center; }
-        </style>
-      </head>
-      <body>
-        <div class="text-center header">
-          <h2 class="store-name">${settings?.storeName || 'مؤسسة بصمة'}</h2>
-          <div>فرع: ${branchWarehouse?.name || 'الفرع'}</div>
-          <div>رقم الفاتورة: ${inv.id}</div>
-          <div>التاريخ: ${new Date(inv.createdAt).toLocaleString('ar-EG')}</div>
-          <div>الكاشير: ${user?.name || 'نظام البيع'}</div>
-          ${customer ? `
-            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #000; font-weight: bold; font-size: 10px; text-align: right;">
-              <div>العميل: ${customer.name}</div>
-              ${customer.phone ? `<div>هاتف العميل: ${customer.phone}</div>` : ''}
-              ${customer.address ? `<div>عنوان العميل: ${customer.address}</div>` : ''}
-            </div>
-          ` : ''}
-        </div>
-
-        <div class="divider"></div>
-
-        <table>
-          <thead>
-            <tr style="border-bottom: 1px solid #000; font-weight: bold;">
-              <th style="text-align: right; padding-bottom: 4px;">الصنف</th>
-              <th style="text-align: center; padding-bottom: 4px;">الكمية</th>
-              <th style="text-align: left; padding-bottom: 4px;">السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div class="divider"></div>
-
-        <div style="space-y-1.5">
-          <div style="display: flex; justify-content: space-between;">
-            <span>المجموع الفرعي:</span>
-            <span>${formatCurrency(inv.subtotal)}</span>
-          </div>
-          ${inv.tax ? `
-          <div style="display: flex; justify-content: space-between;">
-            <span>الضريبة (${settings?.taxRate || 0}%):</span>
-            <span>${formatCurrency(inv.tax)}</span>
-          </div>
-          ` : ''}
-          <div class="total-row" style="display: flex; justify-content: space-between; margin-top: 2px;">
-            <span>المجموع النهائي:</span>
-            <span>${formatCurrency(inv.total)}</span>
-          </div>
-        </div>
-
-        <div style="margin-top: 4mm; font-size: 10px;">
-          <span>طريقة الدفع:</span>
-          <span class="bold">${
-            inv.paymentMethod === 'cash' ? 'نقداً (كاش)' : 
-            inv.paymentMethod === 'visa' ? 'بطاقة (فيزا)' : 
-            inv.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
-            inv.paymentMethod === 'instapay' ? 'انستا باي' : 
-            'آجل (على الحساب)'
-          }</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="barcode-container" id="printable-barcode-wrapper">
-          <svg id="print-barcode-svg"></svg>
-        </div>
-
-        <div class="footer-note">
-          شكراً لتسوقكم معنا!
-        </div>
-
-        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-        <script>
-          window.onload = function() {
-            try {
-              JsBarcode("#print-barcode-svg", "${inv.id}", {
-                format: "CODE128",
-                width: 1.5,
-                height: 40,
-                displayValue: true,
-                fontSize: 10,
-                margin: 0
-              });
-            } catch (e) {
-              console.error("Barcode generation failed in print window:", e);
-            }
-            setTimeout(function() {
-              window.print();
-              window.close();
-            }, 350);
-          }
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(content);
-    printWindow.document.close();
+    printReceiptHelper({
+      invoice: inv,
+      templates: printTemplates,
+      settings,
+      branchName: branchWarehouse?.name || 'الفرع',
+      customer,
+      cashierName,
+      isElectron,
+      electronAPI
+    });
   };
 
   const getWhatsAppUrl = (phone: string, invoice: any) => {
@@ -374,6 +281,8 @@ export default function POS() {
   useEffect(() => {
     if (user?.role === 'CASHIER' && user.branchId) {
       setSelectedBranchId(user.branchId);
+      const allowed = (user as any).allowedBranches || [];
+      setActiveBranchIds(allowed.length > 0 ? (allowed.includes(user.branchId) ? allowed : [...allowed, user.branchId].filter(Boolean)) : [user.branchId]);
     }
   }, [user]);
 
@@ -557,100 +466,118 @@ export default function POS() {
     }
   }, [searchParams, contextInvoices]);
 
-  // Memoized stock levels for the selected branch to optimize performance
-  const branchStockMap = React.useMemo(() => {
-    if (!selectedBranchId) return {};
-    const stockMap: Record<string, number> = {};
+  // Memoized stock levels for all active branches to optimize performance
+  const consolidatedStockMap = React.useMemo(() => {
+    const stockMap: Record<string, Record<string, number>> = {}; // branchId -> { sku -> qty }
 
-    // 1. Calculate incoming transfers & receipts
-    transfers
-      .filter(t => (t.type === 'TRANSFER' || t.type === 'RECEIPT') && t.status === 'COMPLETED' && t.toWarehouseId === selectedBranchId)
-      .forEach(t => {
-        t.items?.forEach(item => {
-          const key = item.sku || item.productId;
-          stockMap[key] = (stockMap[key] || 0) + (item.quantity || 0);
-          if (item.sku && item.productId) {
-            stockMap[item.productId] = (stockMap[item.productId] || 0) + (item.quantity || 0);
-          }
+    activeBranchIds.forEach(bId => {
+      stockMap[bId] = {};
+      
+      // 1. Calculate incoming transfers & receipts
+      transfers
+        .filter(t => t && (t.type === 'TRANSFER' || t.type === 'RECEIPT') && t.status === 'COMPLETED' && t.toWarehouseId === bId)
+        .forEach(t => {
+          t.items?.forEach(item => {
+            const key = item.sku || item.productId;
+            stockMap[bId][key] = (stockMap[bId][key] || 0) + (item.quantity || 0);
+            if (item.sku && item.productId) {
+              stockMap[bId][item.productId] = (stockMap[bId][item.productId] || 0) + (item.quantity || 0);
+            }
+          });
         });
-      });
 
-    // 2. Subtract outgoing sales (completed and partially returned invoices)
-    contextInvoices
-      .filter(inv => inv.branchId === selectedBranchId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status))
-      .forEach(inv => {
-        inv.items?.forEach(item => {
-          const qty = (item.quantity || 0) - (item.returnedQuantity || 0);
-          const itemSku = item.variant?.sku || item.sku;
-          const key = itemSku || item.productId;
-          stockMap[key] = (stockMap[key] || 0) - qty;
-          if (itemSku && item.productId) {
-            stockMap[item.productId] = (stockMap[item.productId] || 0) - qty;
-          }
-        });
-      });
+      // 2. Subtract outgoing sales (completed and partially returned invoices)
+      contextInvoices
+        .filter(inv => inv && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status))
+        .forEach(inv => {
+          inv.items?.forEach(item => {
+            const itemBranchId = item.branchId || item.warehouseId || inv.branchId;
+            if (itemBranchId !== bId) return;
 
-    // 3. Subtract outgoing transfers (to other branches)
-    transfers
-      .filter(t => t.type === 'TRANSFER' && (t.status === 'COMPLETED' || t.status === 'SHIPPED') && t.fromWarehouseId === selectedBranchId)
-      .forEach(t => {
-        t.items?.forEach(item => {
-          const key = item.sku || item.productId;
-          stockMap[key] = (stockMap[key] || 0) - (item.quantity || 0);
-          if (item.sku && item.productId) {
-            stockMap[item.productId] = (stockMap[item.productId] || 0) - (item.quantity || 0);
-          }
+            const qty = (item.quantity || 0) - (item.returnedQuantity || 0);
+            const itemSku = item.variant?.sku || item.sku;
+            const key = itemSku || item.productId;
+            stockMap[bId][key] = (stockMap[bId][key] || 0) - qty;
+            if (itemSku && item.productId) {
+              stockMap[bId][item.productId] = (stockMap[bId][item.productId] || 0) - qty;
+            }
+          });
         });
-      });
+
+      // 3. Subtract outgoing transfers (to other branches)
+      transfers
+        .filter(t => t && t.type === 'TRANSFER' && (t.status === 'COMPLETED' || t.status === 'SHIPPED') && t.fromWarehouseId === bId)
+        .forEach(t => {
+          t.items?.forEach(item => {
+            const key = item.sku || item.productId;
+            stockMap[bId][key] = (stockMap[bId][key] || 0) - (item.quantity || 0);
+            if (item.sku && item.productId) {
+              stockMap[bId][item.productId] = (stockMap[bId][item.productId] || 0) - (item.quantity || 0);
+            }
+          });
+        });
+    });
 
     return stockMap;
-  }, [transfers, contextInvoices, selectedBranchId]);
+  }, [transfers, contextInvoices, activeBranchIds]);
 
   const isMainBranch = branchWarehouse?.type === 'MAIN' || branchWarehouse?.id === '1';
 
-  // Helper to get variant stock for a specific branch
-  const getVariantBranchStock = (product: Product, variant: ProductVariant) => {
+  // Helper to get variant stock for a specific branch ID
+  const getVariantBranchStock = (product: Product, variant: ProductVariant, bId: string = selectedBranchId) => {
     const sku = variant.sku || `${product.sku || 'PROD'}-${variant.size}-${variant.color}`;
-    const calculatedStock = branchStockMap[sku] || 0;
+    const branchStock = consolidatedStockMap[bId]?.[sku] || 0;
     
-    // If we are in the main branch, we add the variant's initial quantity as the base
-    if (isMainBranch) {
+    const isMain = bId === '1' || warehouses.find(w => w.id === bId)?.type === 'MAIN';
+    if (isMain) {
       const initialQty = Number(variant.quantity) || 0;
-      return Math.max(0, initialQty + calculatedStock);
+      return Math.max(0, initialQty + branchStock);
     }
     
-    return Math.max(0, calculatedStock);
+    return Math.max(0, branchStock);
   };
 
-  // Helper to get overall product stock for a specific branch
-  const getProductBranchStock = (product: Product) => {
+  // Helper to get overall product stock for a specific branch ID
+  const getProductBranchStock = (product: Product, bId: string = selectedBranchId) => {
     if (product.variants && product.variants.length > 0) {
-      // Sum of all its variants' branch stocks
-      return product.variants.reduce((sum, v) => sum + getVariantBranchStock(product, v), 0);
+      return product.variants.reduce((sum, v) => sum + getVariantBranchStock(product, v, bId), 0);
     }
     
-    const calculatedStock = branchStockMap[product.id] || 0;
-    if (isMainBranch) {
+    const branchStock = consolidatedStockMap[bId]?.[product.id] || 0;
+    const isMain = bId === '1' || warehouses.find(w => w.id === bId)?.type === 'MAIN';
+    if (isMain) {
       const initialQty = Number(product.quantity || (product as any).initialQuantity || 0);
-      return Math.max(0, initialQty + calculatedStock);
+      return Math.max(0, initialQty + branchStock);
     }
-    return Math.max(0, calculatedStock);
+    return Math.max(0, branchStock);
+  };
+
+  // Helper to get consolidated variant stock across all active branches
+  const getVariantConsolidatedStock = (product: Product, variant: ProductVariant) => {
+    return activeBranchIds.reduce((sum, bId) => sum + getVariantBranchStock(product, variant, bId), 0);
+  };
+
+  // Helper to get consolidated product stock across all active branches
+  const getProductConsolidatedStock = (product: Product) => {
+    return activeBranchIds.reduce((sum, bId) => sum + getProductBranchStock(product, bId), 0);
   };
 
   // Memoized available products list
   const availableProducts = React.useMemo(() => {
     return products.map(p => ({
       ...p,
-      branchStock: getProductBranchStock(p)
+      branchStock: getProductConsolidatedStock(p)
     })).filter(p => {
       if ((p as any).isDraft) return false;
-      if (p.warehouseId === selectedBranchId) return true;
+      
+      // If product belongs to any of the active branches, it is available
+      if (p.warehouseId && activeBranchIds.includes(p.warehouseId)) return true;
 
-      // Check if product was received or transferred to this branch
+      // Or if product has had incoming transfers/receipts to any of the active branches
       const hasIncoming = transfers.some(t => 
         (t.type === 'TRANSFER' || t.type === 'RECEIPT') && 
         t.status === 'COMPLETED' && 
-        t.toWarehouseId === selectedBranchId &&
+        activeBranchIds.includes(t.toWarehouseId) &&
         t.items?.some(item => {
           const itemSku = item.sku || item.productId;
           if (item.productId === p.id) return true;
@@ -662,7 +589,7 @@ export default function POS() {
       );
       return hasIncoming;
     });
-  }, [products, branchStockMap, selectedBranchId, branchWarehouse, transfers]);
+  }, [products, consolidatedStockMap, activeBranchIds, warehouses, transfers]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
@@ -831,8 +758,8 @@ export default function POS() {
       : product.id;
 
     const availableStock = selectedVariant
-      ? getVariantBranchStock(product, selectedVariant)
-      : (product.branchStock ?? getProductBranchStock(product));
+      ? getVariantConsolidatedStock(product, selectedVariant)
+      : (product.branchStock ?? getProductConsolidatedStock(product));
 
     const existing = cart.find(item => {
       if (selectedVariant) {
@@ -844,7 +771,7 @@ export default function POS() {
     });
 
     const currentQty = existing ? existing.quantity : 0;
-    if (product.trackInventory !== false && currentQty + 1 > availableStock) {
+    if (product.trackInventory !== false && settings?.allowNegativeInventory !== true && currentQty + 1 > availableStock) {
       alert('عذراً، الكمية المطلوبة تتجاوز المتاح في المخزن الفرعي');
       return;
     }
@@ -886,9 +813,22 @@ export default function POS() {
   };
 
   const updateDiscount = (itemSkuOrId: string, discount: number) => {
+    const canGiveDiscount = user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_give_discount;
+    if (!canGiveDiscount && discount > 0) {
+      alert('عذراً، ليس لديك صلاحية منح خصومات.');
+      return;
+    }
+
     setCart(cart.map(item => {
       const currentKey = item.sku || item.productId;
       if (currentKey === itemSkuOrId) {
+        const maxDiscountPercent = settings?.maxDiscountPercent ?? 100;
+        const discountPercent = item.originalPrice > 0 ? (discount / item.originalPrice) * 100 : 0;
+        if (discountPercent > maxDiscountPercent) {
+          alert(`الخصم تجاوز الحد الأقصى المسموح به في الإعدادات (${maxDiscountPercent}%)`);
+          return item;
+        }
+
         const minPrice = item.minSellingPrice || 0;
         const newPrice = item.originalPrice - discount;
 
@@ -916,14 +856,14 @@ export default function POS() {
     if (!product) return;
 
     const availableStock = item.variant
-      ? getVariantBranchStock(product, item.variant as any)
-      : product.branchStock;
+      ? getVariantConsolidatedStock(product, item.variant as any)
+      : getProductConsolidatedStock(product);
 
     setCart(cart.map(i => {
       const currentKey = i.sku || i.productId;
       if (currentKey === itemSkuOrId) {
         const newQty = Math.max(1, i.quantity + delta);
-        if (product.trackInventory !== false && newQty > availableStock) {
+        if (product.trackInventory !== false && settings?.allowNegativeInventory !== true && newQty > availableStock) {
           alert('الكمية المتاحة لا تكفي');
           return i;
         }
@@ -949,16 +889,87 @@ export default function POS() {
       return;
     }
 
-    if (method === 'debt' && (!selectedCustomer || selectedCustomer.id === 'WALK-IN')) {
-      alert('يجب اختيار عميل مسجل لإجراء عملية البيع الآجل.');
+    const canCreate = user?.role === 'ADMIN' || !user?.permissions || user.permissions.pos_create_invoice;
+    if (!canCreate) {
+      alert('عذراً، ليس لديك صلاحية إنشاء فواتير جديدة.');
       return;
+    }
+
+    if (method === 'debt') {
+      if (!selectedCustomer || selectedCustomer.id === 'WALK-IN') {
+        alert('يجب اختيار عميل مسجل لإجراء عملية البيع الآجل.');
+        return;
+      }
+      if (selectedCustomer.creditLimit !== undefined) {
+        const currentDebit = selectedCustomer.balanceType === 'debit' ? selectedCustomer.balance : -selectedCustomer.balance;
+        const nextDebit = currentDebit + total;
+        if (nextDebit > selectedCustomer.creditLimit) {
+          alert(`عذراً، العميل تجاوز الحد الائتماني المسموح به (${formatCurrency(selectedCustomer.creditLimit)})`);
+          return;
+        }
+      }
     }
 
     setIsSaving(true);
     try {
+      // Distribute cart items across active branches based on stock availability
+      const distributedItems: OrderItem[] = [];
+
+      for (const item of cart) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product || product.trackInventory === false) {
+          // If not tracked or product not found, assign to the main selectedBranchId
+          distributedItems.push({
+            ...item,
+            branchId: selectedBranchId
+          } as any);
+          continue;
+        }
+
+        let remainingQty = item.quantity;
+        
+        // Find stock in each active branch for this product/variant
+        const branchStocks = activeBranchIds.map(bId => {
+          const stock = item.variant
+            ? getVariantBranchStock(product, item.variant as any, bId)
+            : getProductBranchStock(product, bId);
+          return { branchId: bId, stock };
+        });
+
+        // Sort active branches: prefer the primary selectedBranchId first, then others
+        const sortedBranches = [
+          ...branchStocks.filter(b => b.branchId === selectedBranchId),
+          ...branchStocks.filter(b => b.branchId !== selectedBranchId)
+        ];
+
+        for (const bStock of sortedBranches) {
+          if (remainingQty <= 0) break;
+          if (bStock.stock <= 0) continue;
+
+          const take = Math.min(remainingQty, bStock.stock);
+          distributedItems.push({
+            ...item,
+            quantity: take,
+            total: take * item.price,
+            branchId: bStock.branchId
+          } as any);
+          remainingQty -= take;
+        }
+
+        // If there's still remaining quantity (fallback), assign the rest to the primary branch
+        if (remainingQty > 0) {
+          distributedItems.push({
+            ...item,
+            quantity: remainingQty,
+            total: remainingQty * item.price,
+            branchId: selectedBranchId
+          } as any);
+        }
+      }
+
       const newInvoice: Order = {
         id: `INV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-        items: cart,
+        items: distributedItems,
         subtotal,
         tax,
         discount: 0,
@@ -973,6 +984,28 @@ export default function POS() {
       };
 
       await addInvoice(newInvoice);
+
+      // Security Logs Trigger
+      if (settings?.drawerMonitoringEnabled) {
+        await addDoc(collection(db, 'security_logs'), {
+          userId: user.uid,
+          userName: user.name || 'كاشير',
+          action: 'DRAWER_OPENED',
+          details: `فتح درج النقدية لإتمام الفاتورة رقم #${newInvoice.id.slice(-8).toUpperCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const totalDiscount = cart.reduce((sum, item) => sum + (item.discount * item.quantity), 0);
+      if (totalDiscount > 0 && settings?.discountMonitoringEnabled) {
+        await addDoc(collection(db, 'security_logs'), {
+          userId: user.uid,
+          userName: user.name || 'كاشير',
+          action: 'DISCOUNT_APPLIED',
+          details: `تطبيق خصم إجمالي بقيمة ${formatCurrency(totalDiscount)} على الفاتورة رقم #${newInvoice.id.slice(-8).toUpperCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       // Update customer balance and loyalty points if a registered customer is selected
       if (selectedCustomer && selectedCustomer.id !== 'WALK-IN') {
@@ -1107,8 +1140,59 @@ export default function POS() {
     }
 
     try {
+      // Distribute cart items across active branches based on stock availability
+      const distributedItems: OrderItem[] = [];
+
+      for (const item of cart) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product || product.trackInventory === false) {
+          distributedItems.push({
+            ...item,
+            branchId: selectedBranchId
+          } as any);
+          continue;
+        }
+
+        let remainingQty = item.quantity;
+        
+        const branchStocks = activeBranchIds.map(bId => {
+          const stock = item.variant
+            ? getVariantBranchStock(product, item.variant as any, bId)
+            : getProductBranchStock(product, bId);
+          return { branchId: bId, stock };
+        });
+
+        const sortedBranches = [
+          ...branchStocks.filter(b => b.branchId === selectedBranchId),
+          ...branchStocks.filter(b => b.branchId !== selectedBranchId)
+        ];
+
+        for (const bStock of sortedBranches) {
+          if (remainingQty <= 0) break;
+          if (bStock.stock <= 0) continue;
+
+          const take = Math.min(remainingQty, bStock.stock);
+          distributedItems.push({
+            ...item,
+            quantity: take,
+            total: take * item.price,
+            branchId: bStock.branchId
+          } as any);
+          remainingQty -= take;
+        }
+
+        if (remainingQty > 0) {
+          distributedItems.push({
+            ...item,
+            quantity: remainingQty,
+            total: remainingQty * item.price,
+            branchId: selectedBranchId
+          } as any);
+        }
+      }
+
       await updateInvoice(editingPendingInvoiceId, {
-        items: cart,
+        items: distributedItems,
         subtotal,
         tax,
         discount: 0,
@@ -1143,6 +1227,18 @@ export default function POS() {
 
     try {
       await deleteInvoice(invoiceId);
+      
+      // Log Security Action
+      if (settings?.cancelMonitoringEnabled) {
+        await addDoc(collection(db, 'security_logs'), {
+          userId: user?.uid || 'unknown',
+          userName: user?.name || 'كاشير',
+          action: 'INVOICE_CANCELLED',
+          details: `حذف/إلغاء فاتورة معلقة رقم #${invoiceId.slice(-8).toUpperCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       if (editingPendingInvoiceId === invoiceId) {
         clearPendingEdit();
       }
@@ -1163,18 +1259,72 @@ export default function POS() {
           <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
             <ShoppingCart className="w-8 h-8" />
           </div>
-          <div>
+          <div className="flex flex-col gap-1.5">
             <h2 className="text-3xl font-black text-gray-900">{branchWarehouse?.name || 'نقطة البيع'}</h2>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-0.5">
               <div className={cn("w-2.5 h-2.5 rounded-full", currentShift ? "bg-green-500 animate-pulse" : "bg-gray-300")}></div>
               <p className="text-gray-400 font-medium">
                 {currentShift ? `وردية نشطة (${currentShift.id.slice(0, 8)})` : 'لا توجد وردية نشطة'}
               </p>
             </div>
+            
+            {/* Consolidated POS Branch Toggles */}
+            {allowedBranchIds.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2 bg-slate-50/80 p-1.5 rounded-2xl border border-slate-100/50">
+                <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-wider">نقاط البيع المجمعة:</span>
+                {allowedBranchIds.map(bId => {
+                  const bName = warehouses.find(w => w.id === bId)?.name || bId;
+                  const isActive = activeBranchIds.includes(bId);
+                  const isPrimary = bId === selectedBranchId;
+                  
+                  return (
+                    <button
+                      key={bId}
+                      type="button"
+                      disabled={isPrimary}
+                      onClick={() => {
+                        setActiveBranchIds(prev => 
+                          isActive 
+                            ? prev.filter(id => id !== bId) 
+                            : [...prev, bId]
+                        );
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border",
+                        isActive
+                          ? "bg-white text-blue-600 border-blue-100 shadow-sm"
+                          : "bg-transparent text-slate-400 border-transparent hover:bg-slate-100/50 hover:text-slate-600"
+                      )}
+                    >
+                      <div className={cn("w-2 h-2 rounded-full", isActive ? "bg-blue-600" : "bg-slate-300")}></div>
+                      {bName}
+                      {isPrimary && <span className="text-[9px] text-slate-400 font-medium">(أساسي)</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-4 relative z-10">
+          {/* Connection & Sync Status Badges */}
+          <div className="flex gap-2 ml-2">
+            <span className={cn(
+              "text-xs font-black px-3.5 py-2 rounded-xl border flex items-center gap-1.5 shadow-sm transition-all",
+              isOnline ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100 animate-pulse"
+            )}>
+              <span className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500" : "bg-red-500")} />
+              {isOnline ? "متصل بالإنترنت" : "دون اتصال (Offline)"}
+            </span>
+            {isSyncing && (
+              <span className="text-xs font-black px-3.5 py-2 rounded-xl border bg-blue-50 text-blue-700 border-blue-100 shadow-sm flex items-center gap-1.5 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                جاري المزامنة...
+              </span>
+            )}
+          </div>
+
           {incomingRequests.length > 0 && (
             <button
                onClick={() => setShowIncomingRequestsModal(true)}
@@ -1196,7 +1346,7 @@ export default function POS() {
           )}
           {user?.role === 'ADMIN' && (
             <button
-              onClick={() => setSelectedBranchId('')}
+              onClick={() => { setSelectedBranchId(''); setActiveBranchIds([]); }}
               className="px-6 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-black hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2 border border-blue-100"
             >
               <RefreshCcw className="w-4 h-4" />
@@ -2242,6 +2392,39 @@ export default function POS() {
                   </div>
                 </div>
 
+                {/* Return Policy Eligibility Alert Badge */}
+                {(selectedDetail.status === 'COMPLETED' || selectedDetail.status === 'PARTIALLY_RETURNED') && settings?.returnDaysLimit !== undefined && (
+                  (() => {
+                    const returnDays = settings.returnDaysLimit;
+                    if (returnDays === 0) {
+                      return (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-700 text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
+                          <span>⚠️ الاسترجاع معطل تماماً في إعدادات النظام.</span>
+                        </div>
+                      );
+                    }
+                    const invoiceDate = new Date(selectedDetail.createdAt);
+                    const diffTime = Math.abs(new Date().getTime() - invoiceDate.getTime());
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    const isExpired = diffDays > returnDays;
+                    const remainingDays = returnDays - diffDays;
+                    
+                    if (isExpired) {
+                      return (
+                        <div className="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
+                          <span>⚠️ فترة الاسترجاع المسموحة انتهت (الحد الأقصى: {returnDays} أيام، مرّ {diffDays} أيام).</span>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
+                          <span>✓ مسموح بالاسترجاع (متبقي {remainingDays} يوم/أيام من أصل {returnDays} يوم).</span>
+                        </div>
+                      );
+                    }
+                  })()
+                )}
+
                 {showReturnPanel ? (
                   <div className="space-y-4 border-2 border-red-100 p-5 rounded-[2rem] bg-red-50/20">
                     <h5 className="font-black text-red-600 mb-2 flex items-center gap-3">
@@ -2409,7 +2592,14 @@ export default function POS() {
                       {(selectedDetail.items || selectedDetail.products || []).map((item: any, idx: number) => (
                         <div key={idx} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-blue-100 transition-all">
                           <div className="space-y-1 text-right">
-                            <p className="font-black text-sm text-gray-900">{item.name || item.productName}</p>
+                            <p className="font-black text-sm text-gray-900">
+                              {item.name || item.productName}
+                              {item.branchId && item.branchId !== selectedDetail.branchId && (
+                                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold mr-2 border border-slate-200/50">
+                                  من: {warehouses.find(w => w.id === item.branchId)?.name || item.branchId}
+                                </span>
+                              )}
+                            </p>
                             <p className="text-xs text-gray-400 font-bold">
                               الكمية: <span className="text-gray-900 font-sans font-black">{item.quantity}</span> 
                               {item.returnedQuantity > 0 && (
@@ -2495,6 +2685,22 @@ export default function POS() {
                           alert('عذراً، ليس لديك صلاحية عمل مرتجع لهذه الفاتورة.');
                           return;
                         }
+
+                        const returnDays = settings?.returnDaysLimit;
+                        if (returnDays !== undefined) {
+                          if (returnDays === 0) {
+                            alert('عذراً، الاسترجاع معطل تماماً في إعدادات النظام.');
+                            return;
+                          }
+                          const invoiceDate = new Date(selectedDetail.createdAt);
+                          const diffTime = Math.abs(new Date().getTime() - invoiceDate.getTime());
+                          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                          if (diffDays > returnDays) {
+                            alert(`عذراً، تجاوزت هذه الفاتورة فترة الاسترجاع المسموحة (${returnDays} يوم/أيام). تم إصدارها منذ ${diffDays} يوم.`);
+                            return;
+                          }
+                        }
+
                         setShowReturnPanel(true);
                       }}
                       className="px-6 py-3 bg-red-50 text-red-600 font-black rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center gap-2 border border-red-100 active:scale-95 cursor-pointer text-sm"

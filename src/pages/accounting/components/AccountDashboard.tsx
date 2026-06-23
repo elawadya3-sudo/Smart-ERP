@@ -41,7 +41,7 @@ export const AccountDashboard: React.FC<Props> = ({ accounts }) => {
           </div>
         </div>
         <div className="h-12 w-full relative z-10 -mb-2">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 100, height: 48 }}>
             <AreaChart data={sparklineData}>
               <defs>
                 <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">

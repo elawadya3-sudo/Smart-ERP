@@ -168,10 +168,13 @@ export default function InventoryReportsPage() {
       });
 
       const outgoingStock = orders
-        .filter(inv => inv.branchId === warehouseId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
+        .filter(inv => inv && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
         .reduce((sum, inv) => {
-          const item = inv.items?.find((i: any) => i.productId === productId);
-          return sum + (Number(item?.quantity) || 0);
+          const itemsForWh = inv.items?.filter((i: any) => 
+            i && (i.branchId || i.warehouseId || inv.branchId) === warehouseId && i.productId === productId
+          ) || [];
+          const qty = itemsForWh.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
+          return sum + qty;
         }, 0);
 
       const adjustmentsInBranch = transactions.filter(
@@ -226,20 +229,25 @@ export default function InventoryReportsPage() {
     orders
       .filter(o => (o.status === 'COMPLETED' || !o.status) && o.items?.some((i: any) => i.productId === productId))
       .forEach(o => {
-        const item = o.items.find((i: any) => i.productId === productId);
-        const qty = Number(item?.quantity) || 0;
-        list.push({
-          id: o.id,
-          type: 'SALE',
-          reference: o.invoiceNumber || o.id.slice(0, 8),
-          createdAt: o.createdAt?.seconds ? new Date(o.createdAt.seconds * 1000).toISOString() : (o.createdAt || new Date().toISOString()),
-          delta: -qty,
-          unitCost: product?.costPrice || 0,
-          unitPrice: item?.price || 0,
-          notes: o.notes || '',
-          fromWarehouseId: o.branchId || '1',
-          partyName: customers.find(c => c.id === o.customerId)?.name || o.customerName || 'عميل نقدي',
-          rawTx: o
+        const itemsOfProduct = o.items?.filter((i: any) => i.productId === productId) || [];
+        
+        itemsOfProduct.forEach((item: any) => {
+          const qty = Number(item?.quantity) || 0;
+          const itemBranchId = item.branchId || item.warehouseId || o.branchId || '1';
+          
+          list.push({
+            id: o.id,
+            type: 'SALE',
+            reference: o.invoiceNumber || o.id.slice(0, 8),
+            createdAt: o.createdAt?.seconds ? new Date(o.createdAt.seconds * 1000).toISOString() : (o.createdAt || new Date().toISOString()),
+            delta: -qty,
+            unitCost: product?.costPrice || 0,
+            unitPrice: item?.price || 0,
+            notes: o.notes || '',
+            fromWarehouseId: itemBranchId,
+            partyName: customers.find(c => c.id === o.customerId)?.name || o.customerName || 'عميل نقدي',
+            rawTx: o
+          });
         });
       });
 
@@ -1315,7 +1323,7 @@ export default function InventoryReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-64">
                 <p className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest">أداء المبيعات للأصناف الخمسة الأكثر طلباً</p>
-                <ResponsiveContainer width="100%" height="90%">
+                <ResponsiveContainer width="100%" height="90%" minWidth={0} minHeight={0} initialDimension={{ width: 400, height: 230 }}>
                   <BarChart data={topSalesForChart}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} />
@@ -1438,7 +1446,7 @@ export default function InventoryReportsPage() {
               <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center h-64 lg:h-auto">
                 <p className="text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">مساهمة التصنيفات في الأرباح</p>
                 <div className="w-full h-44">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 400, height: 176 }}>
                     <PieChart>
                       <Pie
                         data={pieData}

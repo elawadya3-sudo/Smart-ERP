@@ -120,7 +120,7 @@ export const CostCenterDashboard: React.FC<Props> = ({ costCenters }) => {
           مقارنة الميزانية والأداء (أعلى 5 مراكز)
         </h3>
         <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 400, height: 320 }}>
             <ReBarChart data={chartData} barGap={4}>
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} />
               <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />

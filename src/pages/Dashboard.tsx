@@ -24,9 +24,11 @@ import {
 } from 'recharts';
 import { cn, formatCurrency } from '../lib/utils';
 import { motion } from 'motion/react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, setDoc, getDocs, writeBatch, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Order, Product } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { pageGroups } from '../constants/pageGroups';
 import { 
   aggregateSalesData, 
   calculateDashboardStats, 
@@ -43,7 +45,104 @@ import {
 } from '../components/ui/ErpUI';
 
 export default function Dashboard() {
+  const { user: currentUser } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'ADMIN') return;
+
+    const checkAndRegisterNewPages = async () => {
+      try {
+        const docRef = doc(db, 'system_settings', 'registered_pages');
+        const docSnap = await getDoc(docRef);
+        
+        // Extract all page keys and their details from pageGroups
+        const allPages: { key: string; label: string; groupMasterKey: string }[] = [];
+        pageGroups.forEach(group => {
+          group.pages.forEach(page => {
+            allPages.push({
+              key: page.key,
+              label: page.label,
+              groupMasterKey: group.masterKey
+            });
+          });
+        });
+
+        const allKeys = allPages.map(p => p.key);
+
+        if (!docSnap.exists()) {
+          // Initial setup: save all current keys
+          await setDoc(docRef, { keys: allKeys, updatedAt: new Date().toISOString() });
+          return;
+        }
+
+        const registeredData = docSnap.data();
+        const registeredKeys: string[] = registeredData.keys || [];
+
+        // Find keys in code that are not in Firestore
+        const newPages = allPages.filter(p => !registeredKeys.includes(p.key));
+
+        if (newPages.length > 0) {
+          console.log('New pages detected:', newPages);
+
+          // 1. Update registered pages list in settings
+          const updatedKeys = [...registeredKeys, ...newPages.map(p => p.key)];
+          await setDoc(docRef, { keys: updatedKeys, updatedAt: new Date().toISOString() });
+
+          // 2. Fetch all users to update their permissions
+          const usersSnap = await getDocs(collection(db, 'users'));
+          const batch = writeBatch(db);
+
+          usersSnap.forEach(userDoc => {
+            const userData = userDoc.data();
+            const currentPermissions = userData.permissions || {};
+            const updatedPermissions = { ...currentPermissions };
+
+            let hasUpdates = false;
+
+            newPages.forEach(newPage => {
+              // If user is ADMIN, always give access (true)
+              // If user has the group's master permission, inherit that value
+              if (userData.role === 'ADMIN') {
+                updatedPermissions[newPage.key] = true;
+                hasUpdates = true;
+              } else if (newPage.groupMasterKey in currentPermissions) {
+                updatedPermissions[newPage.key] = !!currentPermissions[newPage.groupMasterKey];
+                hasUpdates = true;
+              } else {
+                // Otherwise default to false
+                updatedPermissions[newPage.key] = false;
+                hasUpdates = true;
+              }
+            });
+
+            if (hasUpdates) {
+              batch.update(userDoc.ref, { permissions: updatedPermissions });
+            }
+          });
+
+          await batch.commit();
+
+          // 3. Create system notifications for each new page
+          for (const newPage of newPages) {
+            await addDoc(collection(db, 'notifications'), {
+              title: 'تحديث جديد في النظام',
+              message: `تم إضافة صفحة "${newPage.label}" إلى النظام.`,
+              description: `تم إدراج الصفحة وتفعيل الصلاحيات تلقائياً لكافة المستخدمين المؤهلين.`,
+              type: 'SYSTEM',
+              isRead: false,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-registering new pages:', err);
+      }
+    };
+
+    checkAndRegisterNewPages();
+  }, [currentUser]);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,7 +299,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="h-[360px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 400, height: 360 }}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">

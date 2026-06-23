@@ -29,10 +29,13 @@ import { formatCurrency, cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { useBranchFilter } from '../../hooks/useBranchFilter';
+import { useSearchParams } from 'react-router-dom';
 
 export default function ProductLedger() {
   const { user } = useAuth();
   const restrictedBranchId = useBranchFilter();
+  const [searchParams] = useSearchParams();
+  const queryProductId = searchParams.get('productId');
 
   // Realtime Lists from Firestore
   const [products, setProducts] = useState<Product[]>([]);
@@ -117,6 +120,18 @@ export default function ProductLedger() {
       setSelectedWarehouseId(restrictedBranchId);
     }
   }, [restrictedBranchId]);
+
+  // Pre-select product from URL query param
+  useEffect(() => {
+    if (queryProductId && products.length > 0) {
+      const prod = products.find(p => p.id === queryProductId);
+      if (prod) {
+        setSelectedProductId(prod.id);
+        setProductSearchTerm(`${prod.name} (${prod.sku || 'بدون كود'})`);
+        setIsSearched(true);
+      }
+    }
+  }, [queryProductId, products]);
 
   // Search filter for product selector dropdown
   const filteredProductsDropdown = useMemo(() => {
@@ -296,60 +311,64 @@ export default function ProductLedger() {
     // 2. Process orders (Sales invoices)
     orders.forEach(order => {
       if (order.status === 'CANCELLED' || order.status === 'PENDING') return;
-      const item = order.items?.find((i: any) => i.productId === selectedProductId);
-      if (!item) return;
+      const itemsOfProduct = order.items?.filter((i: any) => i.productId === selectedProductId) || [];
+      if (itemsOfProduct.length === 0) return;
 
       const cashierName = users.find(u => u.uid === order.cashierId || u.id === order.cashierId)?.name || 'كاشير';
       const date = order.createdAt;
 
-      // Filter by warehouseId
-      if (selectedWarehouseId && order.branchId !== selectedWarehouseId) return;
+      itemsOfProduct.forEach((item: any, idx: number) => {
+        const itemBranchId = item.branchId || item.warehouseId || order.branchId;
 
-      const branchName = warehouses.find(w => w.id === order.branchId)?.name || 'فرع غير معروف';
-      const soldQty = Number(item.quantity) || 0;
+        // Filter by warehouseId
+        if (selectedWarehouseId && itemBranchId !== selectedWarehouseId) return;
 
-      // 2a. Sale row (Outgoing)
-      movements.push({
-        id: order.id + '-sale',
-        date: new Date(date),
-        dateString: date,
-        type: 'SALE',
-        notes: `فاتورة مبيعات رقم #${order.id}`,
-        reference: order.id,
-        warehouseId: order.branchId,
-        warehouseName: branchName,
-        incoming: 0,
-        outgoing: soldQty,
-        createdBy: cashierName,
-        originalDoc: order
-      });
+        const branchName = warehouses.find(w => w.id === itemBranchId)?.name || 'فرع غير معروف';
+        const soldQty = Number(item.quantity) || 0;
 
-      // 2b. Return row (Incoming)
-      let returnedQty = 0;
-      if (order.status === 'RETURNED') {
-        returnedQty = soldQty;
-      } else if (order.status === 'PARTIALLY_RETURNED') {
-        returnedQty = Number(item.returnedQuantity) || 0;
-      }
-
-      if (returnedQty > 0) {
-        // Place return exactly 1 second after invoice date for chronological sorting
-        const returnDate = new Date(new Date(date).getTime() + 1000);
+        // 2a. Sale row (Outgoing)
         movements.push({
-          id: order.id + '-return',
-          date: returnDate,
-          dateString: returnDate.toISOString(),
-          type: 'SALE_RETURN',
-          notes: `مرتجع مبيعات فاتورة رقم #${order.id}`,
+          id: `${order.id}-sale-${itemBranchId}-${idx}`,
+          date: new Date(date),
+          dateString: date,
+          type: 'SALE',
+          notes: `فاتورة مبيعات رقم #${order.id}`,
           reference: order.id,
-          warehouseId: order.branchId,
+          warehouseId: itemBranchId,
           warehouseName: branchName,
-          incoming: returnedQty,
-          outgoing: 0,
+          incoming: 0,
+          outgoing: soldQty,
           createdBy: cashierName,
           originalDoc: order
         });
-      }
+
+        // 2b. Return row (Incoming)
+        let returnedQty = 0;
+        if (order.status === 'RETURNED') {
+          returnedQty = soldQty;
+        } else if (order.status === 'PARTIALLY_RETURNED') {
+          returnedQty = Number(item.returnedQuantity) || 0;
+        }
+
+        if (returnedQty > 0) {
+          // Place return exactly 1 second after invoice date for chronological sorting
+          const returnDate = new Date(new Date(date).getTime() + 1000);
+          movements.push({
+            id: `${order.id}-return-${itemBranchId}-${idx}`,
+            date: returnDate,
+            dateString: returnDate.toISOString(),
+            type: 'SALE_RETURN',
+            notes: `مرتجع مبيعات فاتورة رقم #${order.id}`,
+            reference: order.id,
+            warehouseId: itemBranchId,
+            warehouseName: branchName,
+            incoming: returnedQty,
+            outgoing: 0,
+            createdBy: cashierName,
+            originalDoc: order
+          });
+        }
+      });
     });
 
     // 3. Sort chronologically

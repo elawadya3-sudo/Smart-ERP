@@ -73,6 +73,12 @@ export interface UserPermissions {
   reports_cash?: boolean;
   reports_history?: boolean;
   reports_center?: boolean;
+  pos_create_invoice?: boolean;
+  pos_edit_invoice?: boolean;
+  pos_give_discount?: boolean;
+  pos_open_drawer?: boolean;
+  pos_close_shift?: boolean;
+  pos_reprint_invoice?: boolean;
 }
 
 export interface User {
@@ -81,6 +87,7 @@ export interface User {
   name: string;
   role: UserRole;
   branchId?: string; // Assigned branch for cashiers
+  allowedBranches?: string[]; // Multiple allowed branches for consolidated POS
   isActive?: boolean; // Whether the user can login
   permissions?: UserPermissions;
   createdAt: string;
@@ -141,6 +148,8 @@ export interface OrderItem {
   minSellingPrice?: number; // Minimum allowed price per unit
   total: number;
   returnedQuantity?: number;
+  branchId?: string;
+  warehouseId?: string;
 }
 
 export interface Order {
@@ -188,6 +197,7 @@ export interface Customer {
   address?: string;
   createdAt: string;
   branchId?: string;
+  creditLimit?: number;
 }
 
 export interface Warehouse {
@@ -470,3 +480,47 @@ export interface TransferReceiptDoc {
   cancelledBy?: string;
   cancelledByName?: string;
 }
+
+export interface POSDevice {
+  id: string;
+  name: string;
+  deviceNumber?: string;
+  branchId: string;
+  warehouseId?: string;
+  linkedUserId: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'CONNECTED' | 'OFFLINE';
+  lastLogin?: string;
+  createdAt: string;
+  lastSeen?: string;
+  platform?: string;
+  arch?: string;
+  linkedUserName?: string;
+  linkedUserRole?: string;
+  version?: string;
+}
+
+export interface PrintTemplate {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  companyName: string;
+  taxNumber?: string;
+  qrCodeEnabled: boolean;
+  barcodeEnabled: boolean;
+  paperSize: '58mm' | '80mm' | 'A4';
+  headerMessage?: string;
+  footerMessage?: string;
+  linkedBranchIds: string[];
+  createdAt: string;
+}
+
+export interface SecurityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  action: 'DRAWER_OPENED' | 'DISCOUNT_APPLIED' | 'INVOICE_CANCELLED' | 'SHIFT_FORCE_CLOSED';
+  details: string;
+  timestamp: string;
+  metadata?: any;
+}
+

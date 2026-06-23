@@ -179,10 +179,13 @@ export default function StockTransfersPage() {
 
         // Items Sold (Orders from this branch)
         const sold = orders
-          .filter(o => o && o.branchId === bw.id && o.status !== 'RETURNED')
+          .filter(o => o && o.status !== 'RETURNED')
           .reduce((acc, o) => {
-            const item = (o.items || []).find((i: any) => i && i.productId === p.id);
-            return acc + (item?.quantity || 0);
+            const itemsForBw = (o.items || []).filter((i: any) => 
+              i && (i.branchId || i.warehouseId || o.branchId) === bw.id && i.productId === p.id
+            );
+            const qty = itemsForBw.reduce((s: number, i: any) => s + (i.quantity || 0), 0);
+            return acc + qty;
           }, 0);
 
         levels.push({

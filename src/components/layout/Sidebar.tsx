@@ -263,7 +263,7 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
               (isModuleAllowed('pos') && (!user.permissions || user.permissions.adminPos)) ||
               (isModuleAllowed('branchManagement') && (!user.permissions || user.permissions.branchManagement)) ||
               (isModuleAllowed('cashierManagement') && (!user.permissions || user.permissions.cashierManagement))) && (
-              <SidebarGroup label="نقاط البيع" icon={ShoppingCart} activePathPrefix={['/pos', '/pos/customers', '/branch-management', '/admin/cashiers', '/admin/pos']} collapsed={collapsed}>
+              <SidebarGroup label="نقاط البيع" icon={ShoppingCart} activePathPrefix={['/pos', '/pos/customers', '/pos/reports', '/pos/settings', '/branch-management', '/admin/cashiers', '/admin/pos']} collapsed={collapsed}>
                 {isModuleAllowed('pos') && (!user.permissions || user.permissions.pos) && (
                   <SidebarItem to="/pos" icon={ShoppingCart} label="نقطة البيع" collapsed={collapsed} end />
                 )}
@@ -278,6 +278,12 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                 )}
                 {isModuleAllowed('pos') && (!user.permissions || user.permissions.pos) && (
                   <SidebarItem to="/pos/customers" icon={Users} label="إدارة العملاء" collapsed={collapsed} />
+                )}
+                {isModuleAllowed('pos') && (!user.permissions || user.permissions.pos || user.permissions.reports) && (
+                  <SidebarItem to="/pos/reports" icon={BarChart3} label="تقرير نقاط البيع" collapsed={collapsed} />
+                )}
+                {isModuleAllowed('pos') && (!user.permissions || user.permissions.pos || user.permissions.adminPos) && (
+                  <SidebarItem to="/pos/settings" icon={Settings} label="إعدادات نقاط البيع" collapsed={collapsed} />
                 )}
               </SidebarGroup>
             )}

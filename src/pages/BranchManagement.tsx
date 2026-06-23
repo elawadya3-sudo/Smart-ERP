@@ -29,16 +29,20 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { usePOS } from '../context/POSContext';
 import { formatCurrency, cn } from '../lib/utils';
-import { Order, Shift, Warehouse } from '../types';
+import { Order, Shift, Warehouse, PrintTemplate } from '../types';
 import { useSearchParams } from 'react-router-dom';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
+import { useDesktop } from '../context/DesktopIntegrationContext';
+import { printReceiptHelper } from '../lib/receiptPrinter';
 
 export default function BranchManagement() {
   const { user } = useAuth();
   const { getOpenShift, closeShift, addInvoice, updateInvoice, deleteInvoice, invoices: contextInvoices, shifts: contextShifts } = usePOS();
   const { settings } = useMainStoreSettings();
+  const { isElectron } = useDesktop();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isCashExpenseModalOpen, setIsCashExpenseModalOpen] = useState(false);
   const [cashExpenseAmount, setCashExpenseAmount] = useState(0);
@@ -106,6 +110,16 @@ export default function BranchManagement() {
       const qT = query(collection(db, 'inventory_transactions'), orderBy('createdAt', 'desc'));
       const unsub = onSnapshot(qT, (snapshot) => {
         setTransfers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return () => unsub();
+    } catch (e) { console.error(e); }
+  }, []);
+
+  // Fetch Print Templates
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(collection(db, 'print_templates'), (snapshot) => {
+        setPrintTemplates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrintTemplate)));
       });
       return () => unsub();
     } catch (e) { console.error(e); }
@@ -338,140 +352,20 @@ export default function BranchManagement() {
   };
 
   const handlePrintReceipt = (inv: Order) => {
-    const printWindow = window.open('', '_blank', 'width=450,height=600');
-    if (!printWindow) {
-      alert('تم منع فتح النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة.');
-      return;
-    }
+    const customer = customers.find(c => c.id === inv.customerId);
+    const cashierName = user?.name || 'نظام البيع';
+    const electronAPI = (window as any).electronAPI;
 
-    const itemsHtml = (inv.items || []).map(item => `
-      <tr style="border-bottom: 1px dashed #eee;">
-        <td style="padding: 6px 0; text-align: right; font-weight: bold;">${item.name}</td>
-        <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
-        <td style="padding: 6px 0; text-align: left;">${formatCurrency(item.price)}</td>
-      </tr>
-    `).join('');
-
-    const content = `
-      <!DOCTYPE html>
-      <html dir="rtl">
-      <head>
-        <meta charset="utf-8">
-        <title>فاتورة مبسطة - ${inv.id}</title>
-        <style>
-          @page { size: 80mm auto; margin: 0; }
-          body { 
-            font-family: 'Cairo', system-ui, -apple-system, sans-serif; 
-            margin: 0; 
-            padding: 8mm 5mm; 
-            width: 70mm; 
-            font-size: 11px; 
-            line-height: 1.4; 
-            color: #000;
-          }
-          .text-center { text-align: center; }
-          .bold { font-weight: bold; }
-          .header { margin-bottom: 6mm; }
-          .store-name { font-size: 16px; font-weight: 900; margin: 0 0 2mm 0; }
-          .divider { border-top: 1px dashed #000; margin: 4mm 0; }
-          table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 11px; }
-          .total-row { font-size: 12px; font-weight: 900; }
-          .barcode-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 6mm; }
-          .barcode-container svg { max-width: 60mm; height: auto; }
-          .footer-note { font-size: 9px; margin-top: 4mm; text-align: center; }
-        </style>
-      </head>
-      <body>
-        <div class="text-center header">
-          <h2 class="store-name">${settings?.storeName || 'مؤسسة بصمة'}</h2>
-          <div>فرع: ${branchWarehouse?.name || 'الفرع'}</div>
-          <div>رقم الفاتورة: ${inv.id}</div>
-          <div>التاريخ: ${new Date(inv.createdAt).toLocaleString('ar-EG')}</div>
-          <div>الكاشير: ${user?.name || 'نظام البيع'}</div>
-        </div>
-
-        <div class="divider"></div>
-
-        <table>
-          <thead>
-            <tr style="border-bottom: 1px solid #000; font-weight: bold;">
-              <th style="text-align: right; padding-bottom: 4px;">الصنف</th>
-              <th style="text-align: center; padding-bottom: 4px;">الكمية</th>
-              <th style="text-align: left; padding-bottom: 4px;">السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div class="divider"></div>
-
-        <div style="space-y-1.5">
-          <div style="display: flex; justify-content: space-between;">
-            <span>المجموع الفرعي:</span>
-            <span>${formatCurrency(inv.subtotal)}</span>
-          </div>
-          ${inv.tax ? `
-          <div style="display: flex; justify-content: space-between;">
-            <span>الضريبة (${settings?.taxRate || 0}%):</span>
-            <span>${formatCurrency(inv.tax)}</span>
-          </div>
-          ` : ''}
-          <div class="total-row" style="display: flex; justify-content: space-between; margin-top: 2px;">
-            <span>المجموع النهائي:</span>
-            <span>${formatCurrency(inv.total)}</span>
-          </div>
-        </div>
-
-        <div style="margin-top: 4mm; font-size: 10px;">
-          <span>طريقة الدفع:</span>
-          <span class="bold">${
-            inv.paymentMethod === 'cash' ? 'نقداً (كاش)' : 
-            inv.paymentMethod === 'visa' ? 'بطاقة (فيزا)' : 
-            inv.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
-            inv.paymentMethod === 'instapay' ? 'انستا باي' : 
-            'آجل (على الحساب)'
-          }</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="barcode-container" id="printable-barcode-wrapper">
-          <svg id="print-barcode-svg"></svg>
-        </div>
-
-        <div class="footer-note">
-          شكراً لتسوقكم معنا!
-        </div>
-
-        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-        <script>
-          window.onload = function() {
-            try {
-              JsBarcode("#print-barcode-svg", "${inv.id}", {
-                format: "CODE128",
-                width: 1.5,
-                height: 40,
-                displayValue: true,
-                fontSize: 10,
-                margin: 0
-              });
-            } catch (e) {
-              console.error("Barcode generation failed in print window:", e);
-            }
-            setTimeout(function() {
-              window.print();
-              window.close();
-            }, 350);
-          }
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(content);
-    printWindow.document.close();
+    printReceiptHelper({
+      invoice: inv,
+      templates: printTemplates,
+      settings,
+      branchName: branchWarehouse?.name || 'الفرع',
+      customer,
+      cashierName,
+      isElectron,
+      electronAPI
+    });
   };
 
   const getWhatsAppUrl = (phone: string, invoice: any) => {

@@ -205,11 +205,12 @@ export default function StockTaking() {
       });
 
       const outgoingSales = orders
-        .filter(inv => inv.branchId === warehouseId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
+        .filter(inv => inv && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
         .reduce((sum, inv) => {
-          const productQty = inv.items
-            ?.filter((i: any) => i.productId === productId)
-            .reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0) || 0;
+          const itemsForWh = inv.items?.filter((i: any) => 
+            i && (i.branchId || i.warehouseId || inv.branchId) === warehouseId && i.productId === productId
+          ) || [];
+          const productQty = itemsForWh.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0);
           return sum + productQty;
         }, 0);
 

@@ -185,10 +185,13 @@ export default function WarehouseDetails() {
       });
 
       const outgoingStock = orders
-        .filter(inv => inv.branchId === warehouse.id && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
+        .filter(inv => inv && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || !inv.status))
         .reduce((sum, inv) => {
-          const item = inv.items?.find((i: any) => i.productId === productId);
-          return sum + (item?.quantity || 0);
+          const itemsForWh = inv.items?.filter((i: any) => 
+            i && (i.branchId || i.warehouseId || inv.branchId) === warehouse.id && i.productId === productId
+          ) || [];
+          const qty = itemsForWh.reduce((s: number, i: any) => s + (i.quantity || 0), 0);
+          return sum + qty;
         }, 0);
 
       const adjustmentsInBranch = transfers.filter(

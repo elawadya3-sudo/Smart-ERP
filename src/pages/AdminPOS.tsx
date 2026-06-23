@@ -12,16 +12,19 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, onSnapshot, orderBy, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Product, OrderItem, Warehouse, Order, Customer } from '../types';
+import { Product, OrderItem, Warehouse, Order, Customer, PrintTemplate } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import { printReceiptHelper } from '../lib/receiptPrinter';
 import { useAuth } from '../context/AuthContext';
 import { usePOS } from '../context/POSContext';
+import { useDesktop } from '../context/DesktopIntegrationContext';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminPOS() {
   const { user } = useAuth();
   const { addInvoice, invoices } = usePOS();
+  const { isOnline, isSyncing, isElectron } = useDesktop();
   const { settings } = useMainStoreSettings();
   const navigate = useNavigate();
 
@@ -30,6 +33,7 @@ export default function AdminPOS() {
   const [transfers, setTransfers] = useState<any[]>([]);
   const [variantSelectorProduct, setVariantSelectorProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,6 +105,14 @@ export default function AdminPOS() {
     });
   }, []);
 
+  // Fetch Print Templates
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'print_templates'), (snapshot) => {
+      setPrintTemplates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrintTemplate)));
+    });
+    return () => unsub();
+  }, []);
+
   // Fetch completed transfers to calculate branch stock
   useEffect(() => {
     const qT = query(collection(db, 'inventory_transactions'), orderBy('createdAt', 'desc'));
@@ -137,9 +149,12 @@ export default function AdminPOS() {
 
     // 2. Subtract outgoing sales (completed and partially returned invoices)
     invoices
-      .filter(inv => inv.branchId === selectedBranchId && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status))
+      .filter(inv => inv && inv.customerId !== 'EXPENSE' && (inv.status === 'COMPLETED' || inv.status === 'PARTIALLY_RETURNED' || !inv.status))
       .forEach(inv => {
         inv.items?.forEach(item => {
+          const itemBranchId = item.branchId || item.warehouseId || inv.branchId;
+          if (itemBranchId !== selectedBranchId) return;
+
           const qty = (item.quantity || 0) - (item.returnedQuantity || 0);
           const itemSku = item.variant?.sku || item.sku;
           const key = itemSku || item.productId;
@@ -298,7 +313,7 @@ export default function AdminPOS() {
     });
 
     const currentQty = existing?.quantity ?? 0;
-    if (product.trackInventory !== false && currentQty + 1 > availableStock) {
+    if (product.trackInventory !== false && settings?.allowNegativeInventory !== true && currentQty + 1 > availableStock) {
       alert('الكمية المتاحة لا تكفي');
       return;
     }
@@ -353,7 +368,7 @@ export default function AdminPOS() {
       const currentKey = i.sku || i.productId;
       if (currentKey !== itemSkuOrId) return i;
       const newQty = Math.max(1, i.quantity + delta);
-      if (product.trackInventory !== false && newQty > availableStock) {
+      if (product.trackInventory !== false && settings?.allowNegativeInventory !== true && newQty > availableStock) {
         alert('الكمية المتاحة لا تكفي');
         return i;
       }
@@ -369,273 +384,20 @@ export default function AdminPOS() {
   const total = subtotal + tax;
 
   const printReceipt = (invoice: any) => {
-    const branchName = selectedBranch?.name || 'البيع المباشر';
-    const dateStr = new Date(invoice.createdAt || new Date()).toLocaleString('ar-EG');
-    const storeName = settings?.storeName || 'متجرنا';
-    const paperSize = settings?.receiptPaperSize || '80mm';
-    const showLogo = settings?.showLogoInReceipt ?? true;
-    const logoUrl = settings?.storeLogoUrl || '';
-    const taxNumber = settings?.taxRegistrationNumber || '';
-    const showTax = settings?.showTaxDetails ?? true;
-    const showBranch = settings?.showBranchDetails ?? true;
-    const headerMsg = settings?.receiptHeader || '';
-    const footerMsg = settings?.receiptFooter || 'شكراً لتعاملكم معنا';
-
-    const phone = settings?.phone || '';
-    const email = settings?.branchEmail || '';
-
     const customer = customers.find(c => c.id === invoice.customerId);
+    const cashierName = user?.name || 'مدير معتمد';
+    const electronAPI = (window as any).electronAPI;
 
-    let html = '';
-
-    if (paperSize === '80mm') {
-      html = `
-        <!DOCTYPE html><html dir="rtl"><head>
-        <meta charset="utf-8">
-        <title>فاتورة ${invoice.id}</title>
-        <style>
-          @page { margin: 0; }
-          body { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; width: 78mm; margin: 0 auto; padding: 6px; box-sizing: border-box; color: #333; }
-          .header { text-align: center; margin-bottom: 8px; }
-          .logo { max-width: 60px; max-height: 60px; margin-bottom: 4px; border-radius: 8px; }
-          .store-title { font-size: 15px; font-weight: 900; margin: 2px 0; color: #000; }
-          .branch-title { font-size: 12px; font-weight: 700; margin: 2px 0; color: #555; }
-          .meta-info { text-align: center; color: #666; font-size: 9px; margin-bottom: 4px; }
-          .divider { border-top: 1px dashed #999; margin: 6px 0; }
-          table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 6px 0; }
-          th { text-align: right; padding: 3px 2px; border-bottom: 1px solid #000; font-weight: 850; }
-          td { padding: 4px 2px; border-bottom: 1px solid #eee; }
-          .total-section { margin-top: 8px; font-size: 10px; }
-          .total-row { display: flex; justify-content: space-between; padding: 2px 0; }
-          .grand-total { font-weight: 900; font-size: 13px; color: #000; margin-top: 4px; border-top: 1px dashed #000; padding-top: 4px; }
-          .footer-msg { text-align: center; font-size: 9px; color: #777; margin-top: 12px; line-height: 1.4; }
-        </style></head><body>
-        <div class="header">
-          ${showLogo && logoUrl ? `<img class="logo" src="${logoUrl}" alt="Logo" />` : ''}
-          <div class="store-title">${storeName}</div>
-          <div class="branch-title">${branchName}</div>
-          ${headerMsg ? `<div style="font-size: 10px; font-weight: 700; color: #666; margin: 4px 0;">${headerMsg}</div>` : ''}
-        </div>
-        
-        <div class="meta-info">
-          <div>التاريخ: ${dateStr}</div>
-          <div>رقم الفاتورة: ${invoice.id}</div>
-          ${taxNumber ? `<div>الرقم الضريبي: ${taxNumber}</div>` : ''}
-          ${showBranch && phone ? `<div>الهاتف: ${phone}</div>` : ''}
-          ${showBranch && email ? `<div>البريد: ${email}</div>` : ''}
-          ${customer ? `
-            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #bbb; font-weight: bold;">
-              <div>العميل: ${customer.name}</div>
-              ${customer.phone ? `<div>هاتف: ${customer.phone}</div>` : ''}
-              ${customer.address ? `<div>العنوان: ${customer.address}</div>` : ''}
-            </div>
-          ` : ''}
-        </div>
-        
-        <div class="divider"></div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>المنتج</th>
-              <th style="text-align: center;">الكمية</th>
-              <th style="text-align: left;">الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(invoice.items || []).map((it: any) => `
-              <tr>
-                <td>
-                  <div style="font-weight: 700;">${it.name}</div>
-                  <div style="font-size: 9px; color: #777;">${formatCurrency(it.price)}/حبة</div>
-                </td>
-                <td style="text-align: center; font-weight: 700;">${it.quantity}</td>
-                <td style="text-align: left; font-weight: 700;">${formatCurrency(it.total)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <div class="divider"></div>
-        
-        <div class="total-section">
-          ${showTax ? `
-            <div class="total-row">
-              <span>المجموع الفرعي:</span>
-              <span>${formatCurrency(invoice.subtotal || invoice.total)}</span>
-            </div>
-            ${invoice.tax > 0 ? `
-              <div class="total-row">
-                <span>الضريبة (${settings?.taxRate || 15}%):</span>
-                <span>${formatCurrency(invoice.tax)}</span>
-              </div>
-            ` : ''}
-          ` : ''}
-          <div class="total-row grand-total">
-            <span>الإجمالي النهائي:</span>
-            <span>${formatCurrency(invoice.total)}</span>
-          </div>
-          ${invoice.paymentMethod ? `
-            <div class="total-row" style="font-size: 9px; color: #666; margin-top: 4px;">
-              <span>طريقة الدفع:</span>
-              <span>${
-                invoice.paymentMethod === 'cash' ? 'نقدي' : 
-                invoice.paymentMethod === 'visa' ? 'بطاقة ائتمان' : 
-                invoice.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
-                invoice.paymentMethod === 'instapay' ? 'انستا باي' : 
-                'آجل (على الحساب)'
-              }</span>
-            </div>
-          ` : ''}
-        </div>
-        
-        <div class="divider"></div>
-        <div class="footer-msg">${footerMsg}</div>
-        </body></html>
-      `;
-    } else {
-      // A4 format
-      html = `
-        <!DOCTYPE html><html dir="rtl"><head>
-        <meta charset="utf-8">
-        <title>فاتورة ضريبية مبسطة - ${invoice.id}</title>
-        <style>
-          body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; color: #333; font-size: 13px; line-height: 1.5; }
-          .invoice-box { max-width: 800px; margin: auto; border: 1px solid #eee; padding: 30px; border-radius: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); }
-          .header-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #3b82f6; padding-bottom: 20px; }
-          .logo { max-width: 100px; max-height: 100px; border-radius: 12px; }
-          .invoice-details { text-align: left; }
-          .invoice-details h1 { margin: 0 0 10px 0; color: #1e3a8a; font-size: 24px; font-weight: 900; }
-          .info-grid { display: grid; gap: 20px; margin-bottom: 30px; }
-          .info-card { background: #f8fafc; border: 1px solid #f1f5f9; padding: 15px; border-radius: 16px; }
-          .info-card h3 { margin: 0 0 10px 0; font-size: 14px; color: #1e3a8a; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; text-align: right; }
-          th { background: #1e3a8a; color: white; padding: 12px; font-weight: 700; }
-          td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-          .totals-table { width: 250px; margin-right: auto; text-align: left; margin-bottom: 30px; }
-          .totals-table td { padding: 8px 12px; border-bottom: none; }
-          .totals-table tr.grand-total td { font-weight: 900; font-size: 16px; color: #1e3a8a; border-top: 2px solid #1e3a8a; }
-          .footer { text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; color: #64748b; font-size: 11px; }
-        </style></head><body>
-        <div class="invoice-box">
-          <div class="header-grid">
-            <div style="display: flex; align-items: center; gap: 15px;">
-              ${showLogo && logoUrl ? `<img class="logo" src="${logoUrl}" alt="Logo" />` : ''}
-              <div>
-                <h2 style="margin: 0; font-size: 20px; font-weight: 900; color: #111;">${storeName}</h2>
-                <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 700; color: #4b5563;">${branchName}</p>
-              </div>
-            </div>
-            <div class="invoice-details">
-              <h1>فاتورة ضريبية مبسطة</h1>
-              <p style="margin: 2px 0;">رقم الفاتورة: <span style="font-family: monospace; font-weight: bold;">${invoice.id}</span></p>
-              <p style="margin: 2px 0;">التاريخ: ${dateStr}</p>
-            </div>
-          </div>
-
-          <div class="info-grid" style="display: grid; grid-template-columns: ${customer ? '1fr 1fr 1fr' : '1fr 1fr'}; gap: 20px; margin-bottom: 30px;">
-            <div class="info-card">
-              <h3>معلومات المصدر</h3>
-              <p style="margin: 4px 0;"><strong>الجهة:</strong> ${storeName} - ${branchName}</p>
-              ${taxNumber ? `<p style="margin: 4px 0;"><strong>الرقم الضريبي:</strong> ${taxNumber}</p>` : ''}
-              ${showBranch && phone ? `<p style="margin: 4px 0;"><strong>الهاتف:</strong> ${phone}</p>` : ''}
-              ${showBranch && email ? `<p style="margin: 4px 0;"><strong>البريد الإلكتروني:</strong> ${email}</p>` : ''}
-            </div>
-            ${customer ? `
-              <div class="info-card">
-                <h3>معلومات العميل</h3>
-                <p style="margin: 4px 0;"><strong>الاسم:</strong> ${customer.name}</p>
-                ${customer.phone ? `<p style="margin: 4px 0;"><strong>الهاتف:</strong> ${customer.phone}</p>` : ''}
-                ${customer.address ? `<p style="margin: 4px 0;"><strong>العنوان:</strong> ${customer.address}</p>` : ''}
-              </div>
-            ` : ''}
-            <div class="info-card">
-              <h3>تفاصيل الدفع والمبيعات</h3>
-              <p style="margin: 4px 0;"><strong>طريقة الدفع:</strong> ${
-                invoice.paymentMethod === 'cash' ? 'نقدي (كاش)' : 
-                invoice.paymentMethod === 'visa' ? 'بطاقة ائتمان' : 
-                invoice.paymentMethod === 'vodafone' ? 'فودافون كاش' : 
-                invoice.paymentMethod === 'instapay' ? 'انستا باي' : 
-                'آجل (على الحساب)'
-              }</p>
-              <p style="margin: 4px 0;"><strong>حالة الدفع:</strong> ${invoice.paymentMethod === 'debt' ? 'آجل (على الحساب)' : 'مدفوعة بالكامل'}</p>
-              ${invoice.cashierId ? `<p style="margin: 4px 0;"><strong>الكاشير:</strong> مدير معتمد</p>` : ''}
-              ${headerMsg ? `<p style="margin: 4px 0; color: #4b5563; font-style: italic;">"${headerMsg}"</p>` : ''}
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 5%;">#</th>
-                <th>المنتج</th>
-                <th style="text-align: center; width: 15%;">الكمية</th>
-                <th style="text-align: left; width: 20%;">سعر الوحدة</th>
-                <th style="text-align: left; width: 20%;">الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(invoice.items || []).map((it: any, index: number) => `
-                <tr>
-                  <td>${index + 1}</td>
-                  <td style="font-weight: 700;">${it.name}</td>
-                  <td style="text-align: center;">${it.quantity}</td>
-                  <td style="text-align: left;">${formatCurrency(it.price)}</td>
-                  <td style="text-align: left; font-weight: 700;">${formatCurrency(it.total)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="width: 50%;">
-              ${taxNumber ? `
-                <div style="border: 1px solid #e2e8f0; padding: 15px; border-radius: 12px; background: #fafafa; display: inline-block;">
-                  <div style="font-weight: 700; font-size: 11px; margin-bottom: 5px;">فاتورة ضريبية إلكترونية معتمدة</div>
-                  <div style="color: #64748b; font-size: 10px; line-height: 1.4;">
-                    خاضعة لأنظمة هيئة الزكاة والضريبة والجمارك واللوائح التنفيذية لضريبة القيمة المضافة.
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <table class="totals-table">
-                ${showTax ? `
-                  <tr>
-                    <td style="color: #64748b;">المجموع الفرعي</td>
-                    <td style="text-align: left; font-weight: 700;">${formatCurrency(invoice.subtotal || invoice.total)}</td>
-                  </tr>
-                  ${invoice.tax > 0 ? `
-                    <tr>
-                      <td style="color: #64748b;">ضريبة القيمة المضافة (${settings?.taxRate || 15}%)</td>
-                      <td style="text-align: left; font-weight: 700;">${formatCurrency(invoice.tax)}</td>
-                    </tr>
-                  ` : ''}
-                ` : ''}
-                <tr class="grand-total">
-                  <td>الإجمالي النهائي</td>
-                  <td style="text-align: left;">${formatCurrency(invoice.total)}</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p style="margin: 0; font-weight: 700;">${footerMsg}</p>
-            <p style="margin: 5px 0 0 0; color: #94a3b8;">تم إنشاء هذه الفاتورة إلكترونياً عبر نظام نقاط البيع.</p>
-          </div>
-        </div>
-        </body></html>
-      `;
-    }
-
-    const w = window.open('', '_blank', paperSize === '80mm' ? 'width=400,height=600' : 'width=900,height=900');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      setTimeout(() => { w.print(); w.close(); }, 400);
-    }
+    printReceiptHelper({
+      invoice,
+      templates: printTemplates,
+      settings,
+      branchName: selectedBranch?.name || 'البيع المباشر',
+      customer,
+      cashierName,
+      isElectron,
+      electronAPI
+    });
   };
 
   const handleCheckout = async (method: 'cash' | 'visa' | 'debt' | 'vodafone' | 'instapay') => {
@@ -643,9 +405,19 @@ export default function AdminPOS() {
     if (!user?.uid) { alert('يرجى تسجيل الدخول أولاً'); return; }
     if (cart.length === 0) return;
 
-    if (method === 'debt' && (!selectedCustomer || selectedCustomer.id === 'WALK-IN')) {
-      alert('يجب اختيار عميل مسجل لإجراء عملية البيع الآجل.');
-      return;
+    if (method === 'debt') {
+      if (!selectedCustomer || selectedCustomer.id === 'WALK-IN') {
+        alert('يجب اختيار عميل مسجل لإجراء عملية البيع الآجل.');
+        return;
+      }
+      if (selectedCustomer.creditLimit !== undefined) {
+        const currentDebit = selectedCustomer.balanceType === 'debit' ? selectedCustomer.balance : -selectedCustomer.balance;
+        const nextDebit = currentDebit + total;
+        if (nextDebit > selectedCustomer.creditLimit) {
+          alert(`عذراً، العميل تجاوز الحد الائتماني المسموح به (${formatCurrency(selectedCustomer.creditLimit)})`);
+          return;
+        }
+      }
     }
 
     setIsSaving(true);
@@ -667,6 +439,28 @@ export default function AdminPOS() {
         notes: noteText.trim() || undefined,
       };
       await addInvoice(order);
+
+      // Security Logs Trigger
+      if (settings?.drawerMonitoringEnabled) {
+        await addDoc(collection(db, 'security_logs'), {
+          userId: user.uid,
+          userName: user.name || 'مدير',
+          action: 'DRAWER_OPENED',
+          details: `فتح درج النقدية لإتمام الفاتورة للمدير رقم #${order.id.slice(-8).toUpperCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const totalDiscount = cart.reduce((sum, item) => sum + (item.discount * item.quantity), 0);
+      if (totalDiscount > 0 && settings?.discountMonitoringEnabled) {
+        await addDoc(collection(db, 'security_logs'), {
+          userId: user.uid,
+          userName: user.name || 'مدير',
+          action: 'DISCOUNT_APPLIED',
+          details: `تطبيق خصم إجمالي بقيمة ${formatCurrency(totalDiscount)} على الفاتورة للمدير رقم #${order.id.slice(-8).toUpperCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       // Update customer balance and loyalty points if a registered customer is selected
       if (selectedCustomer && selectedCustomer.id !== 'WALK-IN') {
@@ -783,6 +577,23 @@ export default function AdminPOS() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Connection & Sync Status Badges */}
+          <div className="flex gap-2 ml-2">
+            <span className={cn(
+              "text-xs font-black px-3.5 py-2 rounded-xl border flex items-center gap-1.5 shadow-sm transition-all",
+              isOnline ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100 animate-pulse"
+            )}>
+              <span className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500" : "bg-red-500")} />
+              {isOnline ? "متصل بالإنترنت" : "دون اتصال (Offline)"}
+            </span>
+            {isSyncing && (
+              <span className="text-xs font-black px-3.5 py-2 rounded-xl border bg-blue-50 text-blue-700 border-blue-100 shadow-sm flex items-center gap-1.5 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                جاري المزامنة...
+              </span>
+            )}
+          </div>
+
           {isSuccess && (
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
               className="flex items-center gap-2 bg-green-50 text-green-600 px-5 py-2.5 rounded-2xl font-black text-sm border border-green-100">

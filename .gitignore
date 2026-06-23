@@ -1,8 +1,15 @@
 node_modules/
 build/
 dist/
+dist-electron/
+dist-electron
+out/
+release/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+recover.js
+scratch_log.ps1
+public/installers/

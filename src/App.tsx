@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { POSProvider } from './context/POSContext';
 import { SuperAdminProvider, useSuperAdmin } from './context/SuperAdminContext';
@@ -54,6 +54,9 @@ import AccountsPayable from './pages/inventory/AccountsPayable';
 import ReportsCenter from './pages/reports/ReportsCenter';
 import SystemModules from './pages/superadmin/SystemModules';
 import PosCustomers from './pages/pos/PosCustomers';
+import POSReports from './pages/pos/POSReports';
+import POSSettings from './pages/pos/POSSettings';
+import { DesktopIntegrationProvider } from './context/DesktopIntegrationContext';
 
 // ─── Super Admin Imports ──────────────────────────────────────────────────────
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
@@ -87,6 +90,9 @@ function SuperAdminGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+const isElectron = typeof window !== 'undefined' && 'electronAPI' in window;
+const Router = isElectron ? HashRouter : BrowserRouter;
+
 export default function App() {
   const { settings } = useMainStoreSettings();
   
@@ -102,8 +108,9 @@ export default function App() {
   return (
     <SuperAdminProvider>
       <AuthProvider>
-        <POSProvider>
-          <Router>
+        <DesktopIntegrationProvider>
+          <POSProvider>
+            <Router>
           <Routes>
             {/* ── Super Admin Routes (fully isolated) ── */}
             <Route path="/superadmin/login" element={<SuperAdminLogin />} />
@@ -131,6 +138,8 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/pos" element={<POS />} />
               <Route path="/pos/customers" element={<PosCustomers />} />
+              <Route path="/pos/reports" element={<POSReports />} />
+              <Route path="/pos/settings" element={<POSSettings />} />
               <Route path="/branch-management" element={<BranchManagement />} />
               <Route path="/inventory">
                 <Route index element={<InventoryDashboard />} />
@@ -178,7 +187,8 @@ export default function App() {
           </Routes>
         </Router>
       </POSProvider>
-    </AuthProvider>
-  </SuperAdminProvider>
+        </DesktopIntegrationProvider>
+      </AuthProvider>
+    </SuperAdminProvider>
   );
 }

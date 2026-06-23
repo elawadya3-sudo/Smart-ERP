@@ -172,7 +172,7 @@ function SalesTab({ orders, products, warehouses, getBranchName }: any) {
       {chartData.length > 0 && (
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
           <h3 className="text-xl font-black text-gray-900 mb-6">أداء الفروع</h3>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={0} initialDimension={{ width: 400, height: 280 }}>
             <BarChart data={chartData} margin={{ right: 0, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 12, fontWeight: 700 }} />

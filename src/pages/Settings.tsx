@@ -39,6 +39,7 @@ const schema = z.object({
   taxRate: z.number().min(0).max(100).default(15),
   allowCrossbranchRequest: z.boolean().default(false),
   allowAddMainWarehouse: z.boolean().default(true),
+  returnDaysLimit: z.number().min(0, 'يجب أن يكون عدد الأيام 0 أو أكثر').default(14),
   receiptHeader: z.string().optional(),
   receiptFooter: z.string().optional(),
   showLogoInReceipt: z.boolean().default(true),
@@ -103,6 +104,7 @@ export default function Settings() {
       taxRate: 15,
       allowCrossbranchRequest: false,
       allowAddMainWarehouse: true,
+      returnDaysLimit: 14,
       receiptHeader: 'شكراً لزيارتكم',
       receiptFooter: 'الفاتورة خاضعة لضريبة القيمة المضافة',
       showLogoInReceipt: true,
@@ -126,6 +128,7 @@ export default function Settings() {
         taxRate: settings.taxRate ?? 15,
         allowCrossbranchRequest: settings.allowCrossbranchRequest ?? false,
         allowAddMainWarehouse: settings.allowAddMainWarehouse ?? true,
+        returnDaysLimit: settings.returnDaysLimit ?? 14,
         receiptHeader: settings.receiptHeader || 'شكراً لزيارتكم',
         receiptFooter: settings.receiptFooter || 'الفاتورة خاضعة لضريبة القيمة المضافة',
         showLogoInReceipt: settings.showLogoInReceipt ?? true,
@@ -251,6 +254,7 @@ export default function Settings() {
               taxRate: settings.taxRate ?? 15,
               allowCrossbranchRequest: settings.allowCrossbranchRequest ?? false,
               allowAddMainWarehouse: settings.allowAddMainWarehouse ?? true,
+              returnDaysLimit: settings.returnDaysLimit ?? 14,
               receiptHeader: settings.receiptHeader || 'شكراً لزيارتكم',
               receiptFooter: settings.receiptFooter || 'الفاتورة خاضعة لضريبة القيمة المضافة',
               showLogoInReceipt: settings.showLogoInReceipt ?? true,
@@ -543,7 +547,7 @@ export default function Settings() {
 
               {/* Toggle 2: Allow main warehouse creation */}
               <div className="flex items-center justify-between bg-gradient-to-l from-blue-50/50 to-indigo-50/50 p-6 rounded-2xl border border-blue-100/50">
-                <div className="flex-1">
+                <div className="flex-1 text-right">
                   <h4 className="text-sm font-black text-gray-900 mb-1">السماح بإضافة مستودع رئيسي جديد</h4>
                   <p className="text-xs text-gray-500 font-medium leading-relaxed">
                     تفعيل أو إلغاء إمكانية إضافة مستودع من النوع "رئيسي" (Main) في صفحة إدارة المستودعات
@@ -564,6 +568,29 @@ export default function Settings() {
                       !isAdmin && "opacity-60 cursor-not-allowed"
                     )} />
                   </label>
+                </div>
+              </div>
+
+              {/* Input for returnDaysLimit */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-gradient-to-l from-blue-50/50 to-indigo-50/50 p-6 rounded-2xl border border-blue-100/50 gap-4">
+                <div className="flex-1 text-right">
+                  <h4 className="text-sm font-black text-gray-900 mb-1">فترة سماح استرجاع المنتجات بالفواتير (بالأيام)</h4>
+                  <p className="text-xs text-gray-400 font-medium leading-relaxed">
+                    حدد عدد الأيام المسموح فيها للعميل باسترجاع المنتجات من تاريخ إصدار الفاتورة. (أدخل 0 لتعطيل الاسترجاع نهائياً).
+                  </p>
+                </div>
+                <div className="w-full md:w-32">
+                  <input
+                    type="number"
+                    {...register('returnDaysLimit', { valueAsNumber: true })}
+                    readOnly={!isAdmin}
+                    className={cn(
+                      "w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none",
+                      errors.returnDaysLimit ? "focus:ring-red-100 border-red-500" : "",
+                      !isAdmin && "opacity-70 cursor-not-allowed"
+                    )}
+                  />
+                  {errors.returnDaysLimit && <p className="text-[10px] text-red-500 font-bold mt-1 text-center">{(errors.returnDaysLimit.message as string)}</p>}
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   Plus, 
@@ -26,7 +26,8 @@ import {
   BarChart3,
   Printer,
   QrCode,
-  CheckSquare
+  CheckSquare,
+  History
 } from 'lucide-react';
 import { productsService } from '../services/firestore';
 import { Product } from '../types';
@@ -36,10 +37,298 @@ import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import CategoriesAndBrands from './products/CategoriesAndBrands';
 import BarcodePrintModal from '../components/products/BarcodePrintModal';
+import ProductLedger from './inventory/ProductLedger';
+
+// ─── MEMOIZED PRODUCT ROW (TABLE VIEW) ──────────────────────────────────
+const ProductRow = React.memo(({ 
+  product, 
+  isSelected, 
+  onToggle, 
+  onDelete, 
+  onEdit, 
+  onPrintBarcode, 
+  formatCurrency 
+}: { 
+  product: Product; 
+  isSelected: boolean; 
+  onToggle: () => void; 
+  onDelete: () => void; 
+  onEdit: () => void; 
+  onPrintBarcode: () => void; 
+  formatCurrency: (v: number) => string; 
+}) => {
+  return (
+    <tr className={cn("group transition-colors", isSelected ? "bg-blue-50/60" : "hover:bg-gray-50/60")}>
+      <td className="px-5 py-4">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggle}
+          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+        />
+      </td>
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center border border-gray-100 group-hover:border-blue-100 transition-colors flex-shrink-0">
+            <Package className="w-5 h-5 text-gray-300 group-hover:text-blue-400 transition-colors" />
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors leading-tight">
+              {product.name}
+            </p>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider font-mono mt-0.5">
+              {product.sku || '—'}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-4">
+        {product.brand ? (
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+            {product.brand}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-1.5 text-gray-500">
+          <Tag className="w-3.5 h-3.5 text-gray-300" />
+          <span className="text-xs font-medium">{product.category || '—'}</span>
+        </div>
+      </td>
+      <td className="px-5 py-4">
+        <span className="text-xs font-bold text-gray-500 font-mono tracking-wider">
+          {product.barcode || '—'}
+        </span>
+      </td>
+      <td className="px-5 py-4">
+        <div>
+          <p className="text-sm font-black text-gray-900">{formatCurrency(product.sellingPrice)}</p>
+          <p className="text-xs text-gray-300 line-through font-medium">{formatCurrency(product.costPrice)}</p>
+        </div>
+      </td>
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5 text-gray-300" />
+          <span className={cn(
+            "text-sm font-black",
+            product.quantity <= 0 ? "text-red-500" :
+            product.quantity <= 5 ? "text-amber-500" :
+            "text-gray-800"
+          )}>
+            {product.quantity}
+          </span>
+          <span className="text-xs text-gray-400 font-medium">قطعة</span>
+        </div>
+      </td>
+      <td className="px-5 py-4">
+        <span className={cn(
+          "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold",
+          product.quantity <= 0
+            ? "bg-red-50 text-red-600 border border-red-100"
+            : product.quantity <= 5
+              ? "bg-amber-50 text-amber-600 border border-amber-100"
+              : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+        )}>
+          {product.quantity <= 0 ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+              نفذ
+            </>
+          ) : product.quantity <= 5 ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+              منخفض
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+              متوفر
+            </>
+          )}
+        </span>
+      </td>
+      <td className="px-5 py-4">
+        <div className="flex items-center justify-end gap-1">
+          <Link
+            to={`/inventory/products?tab=ledger&productId=${product.id}`}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+            title="كشف الحساب (حركة المنتج)"
+          >
+            <History className="w-3.5 h-3.5" />
+          </Link>
+          {product.barcode && (
+            <button
+              onClick={(e) => { e.preventDefault(); onPrintBarcode(); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+              title="طباعة الباركود"
+            >
+              <Printer className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={onEdit}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+            title="تعديل"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+            title="حذف"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}, (prev, next) => {
+  return prev.isSelected === next.isSelected && 
+         prev.product.id === next.product.id &&
+         prev.product.name === next.product.name &&
+         prev.product.quantity === next.product.quantity &&
+         prev.product.sellingPrice === next.product.sellingPrice &&
+         prev.product.costPrice === next.product.costPrice &&
+         prev.product.brand === next.product.brand &&
+         prev.product.category === next.product.category &&
+         prev.product.barcode === next.product.barcode &&
+         prev.product.sku === next.product.sku;
+});
+
+// ─── MEMOIZED PRODUCT CARD (GRID VIEW) ──────────────────────────────────
+const ProductCard = React.memo(({ 
+  product, 
+  isSelected, 
+  onToggle, 
+  onDelete, 
+  onEdit, 
+  onPrintBarcode, 
+  formatCurrency 
+}: { 
+  product: Product; 
+  isSelected: boolean; 
+  onToggle: () => void; 
+  onDelete: () => void; 
+  onEdit: () => void; 
+  onPrintBarcode: () => void; 
+  formatCurrency: (v: number) => string; 
+}) => {
+  return (
+    <div
+      className={cn(
+        "bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group cursor-pointer overflow-hidden",
+        isSelected
+          ? "border-blue-300 bg-blue-50/30"
+          : "border-gray-100 hover:border-blue-100"
+      )}
+      onClick={onToggle}
+    >
+      <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
+        <Package className="w-12 h-12 text-gray-200 group-hover:text-blue-200 transition-colors" />
+        <div className="absolute top-2 right-2">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => { e.stopPropagation(); onToggle(); }}
+            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          />
+        </div>
+        <span className={cn(
+          "absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-black",
+          product.quantity <= 0 ? "bg-red-500 text-white" :
+          product.quantity <= 5 ? "bg-amber-500 text-white" :
+          "bg-emerald-500 text-white"
+        )}>
+          {product.quantity <= 0 ? 'نفذ' : product.quantity <= 5 ? 'منخفض' : 'متوفر'}
+        </span>
+      </div>
+
+      <div className="p-3.5">
+        <p className="font-bold text-gray-900 text-sm leading-tight truncate">{product.name}</p>
+        <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{product.brand || '—'}</p>
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="text-sm font-black text-blue-600">{formatCurrency(product.sellingPrice)}</span>
+          <span className="text-xs text-gray-400 font-bold">{product.quantity} ق</span>
+        </div>
+
+        <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+          <div className="flex gap-1">
+            <Link
+              to={`/inventory/products?tab=ledger&productId=${product.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+              title="كشف الحساب (حركة المنتج)"
+            >
+              <History className="w-3.5 h-3.5" />
+            </Link>
+            {product.barcode && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onPrintBarcode(); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                title="طباعة الباركود"
+              >
+                <Printer className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              title="تعديل"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              title="حذف"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}, (prev, next) => {
+  return prev.isSelected === next.isSelected && 
+         prev.product.id === next.product.id &&
+         prev.product.name === next.product.name &&
+         prev.product.quantity === next.product.quantity &&
+         prev.product.sellingPrice === next.product.sellingPrice &&
+         prev.product.costPrice === next.product.costPrice &&
+         prev.product.brand === next.product.brand &&
+         prev.product.category === next.product.category &&
+         prev.product.barcode === next.product.barcode &&
+         prev.product.sku === next.product.sku;
+});
 
 export default function Products() {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Performance Tracking Variables
+  const renderStartTime = performance.now();
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+
+  const startMountTimeRef = useRef(performance.now());
+  const dbQueryCountRef = useRef(0);
+  const perfContainerRef = useRef<HTMLDivElement>(null);
+
+  const [metrics, setMetrics] = useState({
+    mountTime: 0,
+    dbFetchTime: 0,
+    renderTime: 0,
+    filterTime: 0,
+    renderCount: 0,
+    dbQueryCount: 0
+  });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,8 +336,10 @@ export default function Products() {
     ? 'settings'
     : new URLSearchParams(location.search).get('tab') === 'barcode'
       ? 'barcode'
-      : 'products';
-  const [activeTab, setActiveTab] = useState<'products' | 'settings' | 'barcode'>(initialTab);
+      : new URLSearchParams(location.search).get('tab') === 'ledger'
+        ? 'ledger'
+        : 'products';
+  const [activeTab, setActiveTab] = useState<'products' | 'settings' | 'barcode' | 'ledger'>(initialTab);
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [barcodePrintProducts, setBarcodePrintProducts] = useState<Product[]>([]);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -58,30 +349,54 @@ export default function Products() {
   const [showMoreActions, setShowMoreActions] = useState(false);
   const moreActionsRef = useRef<HTMLDivElement>(null);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
+    const startFetch = performance.now();
+    dbQueryCountRef.current += 1;
     setLoading(true);
     try {
       const data = await productsService.getAll();
+      const endFetch = performance.now();
+      const fetchDuration = endFetch - startFetch;
+      
+      setMetrics(prev => ({
+        ...prev,
+        dbFetchTime: fetchDuration,
+        dbQueryCount: dbQueryCountRef.current
+      }));
       setProducts(data);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadProducts();
-  }, []);
+    if (activeTab === 'products' || activeTab === 'barcode') {
+      loadProducts();
+    }
+    
+    // Page mount timer
+    const mountDuration = performance.now() - startMountTimeRef.current;
+    setMetrics(prev => ({
+      ...prev,
+      mountTime: mountDuration
+    }));
+  }, [loadProducts, activeTab]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
-    setActiveTab(tab === 'settings' ? 'settings' : tab === 'barcode' ? 'barcode' : 'products');
+    setActiveTab(
+      tab === 'settings' ? 'settings' :
+      tab === 'barcode' ? 'barcode' :
+      tab === 'ledger' ? 'ledger' :
+      'products'
+    );
   }, [location.search]);
 
   // Open barcode print modal with specific products
-  const openBarcodePrint = (productsToUse?: Product[]) => {
+  const openBarcodePrint = useCallback((productsToUse?: Product[]) => {
     const toPrint = productsToUse ?? (
       selectedProductIds.length > 0
         ? products.filter(p => selectedProductIds.includes(p.id))
@@ -89,7 +404,7 @@ export default function Products() {
     );
     setBarcodePrintProducts(toPrint);
     setBarcodePrintOpen(true);
-  };
+  }, [products, selectedProductIds]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -102,7 +417,7 @@ export default function Products() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleDeleteProduct = async (id: string) => {
+  const handleDeleteProduct = useCallback(async (id: string) => {
     if (window.confirm('هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.')) {
       try {
         await deleteDoc(doc(db, 'products', id));
@@ -112,13 +427,13 @@ export default function Products() {
         alert('حدث خطأ أثناء الحذف');
       }
     }
-  };
+  }, [loadProducts]);
 
-  const toggleSelectProduct = (id: string) => {
+  const toggleSelectProduct = useCallback((id: string) => {
     setSelectedProductIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
-  };
+  }, []);
 
   const toggleSelectAll = () => {
     if (selectedProductIds.length === filteredProducts.length) {
@@ -149,24 +464,60 @@ export default function Products() {
     }
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.barcode && String(p.barcode).includes(searchTerm));
-    const matchStatus =
-      statusFilter === 'all' ? true :
-      statusFilter === 'active' ? p.quantity > 0 :
-      p.quantity <= 0;
-    return matchSearch && matchStatus;
-  });
+  const { filteredProducts, filterTime } = useMemo(() => {
+    const start = performance.now();
+    const filtered = products.filter(p => {
+      const matchSearch =
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.barcode && String(p.barcode).includes(searchTerm));
+      const matchStatus =
+        statusFilter === 'all' ? true :
+        statusFilter === 'active' ? p.quantity > 0 :
+        p.quantity <= 0;
+      return matchSearch && matchStatus;
+    });
+    const end = performance.now();
+    return { filteredProducts: filtered, filterTime: end - start };
+  }, [products, searchTerm, statusFilter]);
 
-  // Stats derived from products
-  const totalProducts = products.length;
-  const uniqueCategories = new Set(products.map(p => p.category).filter(Boolean)).size;
-  const uniqueBrands = new Set(products.map(p => p.brand).filter(Boolean)).size;
-  const lowStockCount = products.filter(p => p.quantity <= 5 && p.quantity > 0).length;
-  const outOfStockCount = products.filter(p => p.quantity <= 0).length;
+  // Stats derived from products - Memoized
+  const { totalProducts, uniqueCategories, uniqueBrands, lowStockCount, outOfStockCount } = useMemo(() => {
+    const total = products.length;
+    const uniqueCats = new Set(products.map(p => p.category).filter(Boolean)).size;
+    const uniqueBrs = new Set(products.map(p => p.brand).filter(Boolean)).size;
+    const lowStock = products.filter(p => p.quantity <= 5 && p.quantity > 0).length;
+    const outOfStock = products.filter(p => p.quantity <= 0).length;
+    return {
+      totalProducts: total,
+      uniqueCategories: uniqueCats,
+      uniqueBrands: uniqueBrs,
+      lowStockCount: lowStock,
+      outOfStockCount: outOfStock
+    };
+  }, [products]);
+
+  // Zero-overhead rendering metrics logger using DOM text updates
+  useEffect(() => {
+    const renderEnd = performance.now();
+    const renderDuration = renderEnd - renderStartTime;
+    
+    if (perfContainerRef.current) {
+      const mountSpan = perfContainerRef.current.querySelector('#perf-mount-time');
+      const dbSpan = perfContainerRef.current.querySelector('#perf-db-time');
+      const renderSpan = perfContainerRef.current.querySelector('#perf-render-time');
+      const filterSpan = perfContainerRef.current.querySelector('#perf-filter-time');
+      const countSpan = perfContainerRef.current.querySelector('#perf-render-count');
+      const querySpan = perfContainerRef.current.querySelector('#perf-query-count');
+      
+      if (mountSpan) mountSpan.textContent = `${metrics.mountTime.toFixed(1)}ms`;
+      if (dbSpan) dbSpan.textContent = `${metrics.dbFetchTime.toFixed(1)}ms`;
+      if (renderSpan) renderSpan.textContent = `${renderDuration.toFixed(1)}ms`;
+      if (filterSpan) filterSpan.textContent = `${filterTime.toFixed(2)}ms`;
+      if (countSpan) countSpan.textContent = String(renderCountRef.current);
+      if (querySpan) querySpan.textContent = String(dbQueryCountRef.current);
+    }
+  });
 
   return (
     <div className="min-h-screen bg-gray-50/50" dir="rtl">
@@ -271,6 +622,50 @@ export default function Products() {
       {/* ─── Main Content ─────────────────────────────────────────────────── */}
       <div className="p-6 space-y-4">
 
+        {/* ─── Performance Profiling Panel ────────────────────────────────── */}
+        <div 
+          ref={perfContainerRef}
+          className="bg-slate-900 text-slate-100 rounded-2xl p-4 shadow-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl"></div>
+          <div className="flex items-center gap-2.5 relative z-10">
+            <div className="w-9 h-9 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center border border-blue-500/30">
+              <BarChart3 className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white">أدوات قياس الأداء (Performance Profiling)</h3>
+              <p className="text-xs text-slate-400">مراقبة حية لسرعة استجابة واستهلاك الموارد لصفحة المنتجات</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:flex items-center gap-3 md:gap-6 w-full md:w-auto relative z-10">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[100px]">
+              <p className="text-[10px] font-bold text-slate-400">تحميل الواجهة</p>
+              <p id="perf-mount-time" className="text-sm font-black text-blue-400 font-mono mt-0.5">0.0ms</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[100px]">
+              <p className="text-[10px] font-bold text-slate-400">جلب البيانات (DB)</p>
+              <p id="perf-db-time" className="text-sm font-black text-amber-400 font-mono mt-0.5">0.0ms</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[100px]">
+              <p className="text-[10px] font-bold text-slate-400">Render المكونات</p>
+              <p id="perf-render-time" className="text-sm font-black text-emerald-400 font-mono mt-0.5">0.0ms</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[100px]">
+              <p className="text-[10px] font-bold text-slate-400">البحث والفلترة</p>
+              <p id="perf-filter-time" className="text-sm font-black text-purple-400 font-mono mt-0.5">0.0ms</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[80px]">
+              <p className="text-[10px] font-bold text-slate-400">Renders</p>
+              <p id="perf-render-count" className="text-sm font-black text-pink-400 font-mono mt-0.5">0</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-right min-w-[80px]">
+              <p className="text-[10px] font-bold text-slate-400">استعلامات DB</p>
+              <p id="perf-query-count" className="text-sm font-black text-cyan-400 font-mono mt-0.5">0</p>
+            </div>
+          </div>
+        </div>
+
         {/* ─── Tab Bar ────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-xl p-1 w-fit shadow-sm">
           <button
@@ -313,6 +708,18 @@ export default function Products() {
                 {products.filter(p => p.barcode).length > 9 ? '9+' : products.filter(p => p.barcode).length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={cn(
+              "px-5 py-2 text-sm font-bold transition-all rounded-lg flex items-center gap-2",
+              activeTab === 'ledger'
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+            )}
+          >
+            <History className="w-4 h-4" />
+            كشف حساب المنتج
           </button>
         </div>
 
@@ -446,14 +853,24 @@ export default function Products() {
                         <span className="text-xs font-black text-indigo-600 flex-shrink-0">{formatCurrency(product.sellingPrice)}</span>
                       </div>
 
-                      {/* Quick print single */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openBarcodePrint([product]); }}
-                        className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        طباعة هذا الصنف
-                      </button>
+                      {/* Actions */}
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openBarcodePrint([product]); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          طباعة الباركود
+                        </button>
+                        <Link
+                          to={`/inventory/products?tab=ledger&productId=${product.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          كشف الحساب
+                        </Link>
+                      </div>
                     </motion.div>
                   ))
                 )}
@@ -468,6 +885,8 @@ export default function Products() {
               )}
             </div>
           </div>
+        ) : activeTab === 'ledger' ? (
+          <ProductLedger />
         ) : (
           <>
             {/* ─── Toolbar ──────────────────────────────────────────────────── */}
@@ -660,7 +1079,7 @@ export default function Products() {
                         <th className="px-5 py-3.5 text-xs font-black text-gray-400 uppercase tracking-wider">السعر</th>
                         <th className="px-5 py-3.5 text-xs font-black text-gray-400 uppercase tracking-wider">المخزون</th>
                         <th className="px-5 py-3.5 text-xs font-black text-gray-400 uppercase tracking-wider">الحالة</th>
-                        <th className="px-5 py-3.5 w-24"></th>
+                        <th className="px-5 py-3.5 w-40"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -701,125 +1120,16 @@ export default function Products() {
                           </td>
                         </tr>
                       ) : filteredProducts.map((product) => (
-                        <motion.tr
+                        <ProductRow
                           key={product.id}
-                          layout
-                          className={cn(
-                            "group transition-colors",
-                            selectedProductIds.includes(product.id)
-                              ? "bg-blue-50/60"
-                              : "hover:bg-gray-50/60"
-                          )}
-                        >
-                          <td className="px-5 py-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedProductIds.includes(product.id)}
-                              onChange={() => toggleSelectProduct(product.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center border border-gray-100 group-hover:border-blue-100 transition-colors flex-shrink-0">
-                                <Package className="w-5 h-5 text-gray-300 group-hover:text-blue-400 transition-colors" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors leading-tight">
-                                  {product.name}
-                                </p>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider font-mono mt-0.5">
-                                  {product.sku || '—'}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            {product.brand ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-                                {product.brand}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-300">—</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-1.5 text-gray-500">
-                              <Tag className="w-3.5 h-3.5 text-gray-300" />
-                              <span className="text-xs font-medium">{product.category || '—'}</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="text-xs font-bold text-gray-500 font-mono tracking-wider">
-                              {product.barcode || '—'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div>
-                              <p className="text-sm font-black text-gray-900">{formatCurrency(product.sellingPrice)}</p>
-                              <p className="text-xs text-gray-300 line-through font-medium">{formatCurrency(product.costPrice)}</p>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-1.5">
-                              <Layers className="w-3.5 h-3.5 text-gray-300" />
-                              <span className={cn(
-                                "text-sm font-black",
-                                product.quantity <= 0 ? "text-red-500" :
-                                product.quantity <= 5 ? "text-amber-500" :
-                                "text-gray-800"
-                              )}>
-                                {product.quantity}
-                              </span>
-                              <span className="text-xs text-gray-400 font-medium">قطعة</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className={cn(
-                              "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold",
-                              product.quantity <= 0
-                                ? "bg-red-50 text-red-600 border border-red-100"
-                                : product.quantity <= 5
-                                  ? "bg-amber-50 text-amber-600 border border-amber-100"
-                                  : "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                            )}>
-                              {product.quantity <= 0 ? (
-                                <>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                                  نفذ
-                                </>
-                              ) : product.quantity <= 5 ? (
-                                <>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                                  منخفض
-                                </>
-                              ) : (
-                                <>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                                  متوفر
-                                </>
-                              )}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => navigate(`/inventory/products/edit/${product.id}`)}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                                title="تعديل"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProduct(product.id)}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                title="حذف"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </motion.tr>
+                          product={product}
+                          isSelected={selectedProductIds.includes(product.id)}
+                          onToggle={() => toggleSelectProduct(product.id)}
+                          onDelete={() => handleDeleteProduct(product.id)}
+                          onEdit={() => navigate(`/inventory/products/edit/${product.id}`)}
+                          onPrintBarcode={() => openBarcodePrint([product])}
+                          formatCurrency={formatCurrency}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -866,63 +1176,16 @@ export default function Products() {
                     <p className="font-bold">لا توجد أصناف</p>
                   </div>
                 ) : filteredProducts.map((product) => (
-                  <motion.div
+                  <ProductCard
                     key={product.id}
-                    layout
-                    className={cn(
-                      "bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group cursor-pointer overflow-hidden",
-                      selectedProductIds.includes(product.id)
-                        ? "border-blue-300 bg-blue-50/30"
-                        : "border-gray-100 hover:border-blue-100"
-                    )}
-                    onClick={() => toggleSelectProduct(product.id)}
-                  >
-                    <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
-                      <Package className="w-12 h-12 text-gray-200 group-hover:text-blue-200 transition-colors" />
-                      <div className="absolute top-2 right-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedProductIds.includes(product.id)}
-                          onChange={(e) => { e.stopPropagation(); toggleSelectProduct(product.id); }}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                      </div>
-                      <span className={cn(
-                        "absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-black",
-                        product.quantity <= 0 ? "bg-red-500 text-white" :
-                        product.quantity <= 5 ? "bg-amber-500 text-white" :
-                        "bg-emerald-500 text-white"
-                      )}>
-                        {product.quantity <= 0 ? 'نفذ' : product.quantity <= 5 ? 'منخفض' : 'متوفر'}
-                      </span>
-                    </div>
-
-                    <div className="p-3.5">
-                      <p className="font-bold text-gray-900 text-sm leading-tight truncate">{product.name}</p>
-                      <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{product.brand || '—'}</p>
-                      <div className="flex items-center justify-between mt-2.5">
-                        <span className="text-sm font-black text-blue-600">{formatCurrency(product.sellingPrice)}</span>
-                        <span className="text-xs text-gray-400 font-bold">{product.quantity} ق</span>
-                      </div>
-
-                      <div className="flex gap-1.5 mt-3 pt-3 border-t border-gray-50">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/inventory/products/edit/${product.id}`); }}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          تعديل
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
+                    product={product}
+                    isSelected={selectedProductIds.includes(product.id)}
+                    onToggle={() => toggleSelectProduct(product.id)}
+                    onDelete={() => handleDeleteProduct(product.id)}
+                    onEdit={() => navigate(`/inventory/products/edit/${product.id}`)}
+                    onPrintBarcode={() => openBarcodePrint([product])}
+                    formatCurrency={formatCurrency}
+                  />
                 ))}
               </div>
             )}
@@ -937,6 +1200,7 @@ export default function Products() {
             isOpen={barcodePrintOpen}
             onClose={() => setBarcodePrintOpen(false)}
             selectedProducts={barcodePrintProducts}
+            allProducts={products}
           />
         )}
       </AnimatePresence>

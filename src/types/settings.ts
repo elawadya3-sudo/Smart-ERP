@@ -8,6 +8,7 @@ export interface MainStoreSettings {
   taxRate: number;
   allowCrossbranchRequest: boolean;
   allowAddMainWarehouse?: boolean;
+  returnDaysLimit?: number;
   receiptHeader?: string;
   receiptFooter?: string;
   showLogoInReceipt?: boolean;
@@ -16,5 +17,13 @@ export interface MainStoreSettings {
   showTaxDetails?: boolean;
   showBranchDetails?: boolean;
   storeLogoUrl?: string;
+  allowNegativeInventory?: boolean;
+  enableStockTracking?: boolean;
+  defaultCustomerId?: string;
+  allowQuickCustomerCreate?: boolean;
+  maxDiscountPercent?: number;
+  drawerMonitoringEnabled?: boolean;
+  discountMonitoringEnabled?: boolean;
+  cancelMonitoringEnabled?: boolean;
   updatedAt?: any;
 }

@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../context/AuthContext';
 
 interface CommandItem {
   id: string;
@@ -37,8 +38,20 @@ interface CommandPaletteProps {
 
 export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+
+  const allowedBranchIds = React.useMemo(() => {
+    if (user?.role === 'CASHIER') {
+      const uAllowed = (user as any).allowedBranches || [];
+      if (uAllowed.length > 0) {
+        return uAllowed.includes(user.branchId) ? uAllowed : [...uAllowed, user.branchId].filter(Boolean);
+      }
+      return user.branchId ? [user.branchId] : [];
+    }
+    return [];
+  }, [user]);
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -116,7 +129,10 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
 
   // Map dynamic entities to Command Items
   const dynamicCommands: CommandItem[] = [
-    ...products.map(p => ({
+    ...(user?.role === 'CASHIER' 
+      ? products.filter(p => !p.warehouseId || p.warehouseId === '1' || allowedBranchIds.includes(p.warehouseId))
+      : products
+    ).map(p => ({
       id: `p-${p.id}`,
       label: p.name,
       subtitle: `سعر البيع: ${p.sellingPrice} - SKU: ${p.sku || ''}`,
@@ -124,7 +140,10 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       icon: Package,
       path: `/inventory/products`
     })),
-    ...customers.map(c => ({
+    ...(user?.role === 'CASHIER'
+      ? customers.filter(c => c.branchId && allowedBranchIds.includes(c.branchId))
+      : customers
+    ).map(c => ({
       id: `c-${c.id}`,
       label: c.name || c.phone,
       subtitle: `الهاتف: ${c.phone || ''} - الرصيد: ${c.balance || 0}`,
@@ -132,7 +151,10 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       icon: Users,
       path: `/customers`
     })),
-    ...suppliers.map(s => ({
+    ...(user?.role === 'CASHIER'
+      ? [] // Hide suppliers entirely for Cashier
+      : suppliers
+    ).map(s => ({
       id: `s-${s.id}`,
       label: s.name || s.company,
       subtitle: `الهاتف: ${s.phone || ''} - كود المورد: ${s.code || ''}`,
@@ -140,7 +162,10 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       icon: Building2,
       path: `/inventory/accounts-payable`
     })),
-    ...employees.map(emp => ({
+    ...(user?.role === 'CASHIER'
+      ? [] // Hide employees entirely for Cashier
+      : employees
+    ).map(emp => ({
       id: `emp-${emp.uid}`,
       label: emp.name,
       subtitle: `البريد: ${emp.email} - الدور: ${emp.role || ''}`,
@@ -148,15 +173,21 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       icon: UserCheck,
       path: `/settings`
     })),
-    ...invoices.map(inv => ({
+    ...(user?.role === 'CASHIER'
+      ? invoices.filter(inv => inv.branchId && allowedBranchIds.includes(inv.branchId))
+      : invoices
+    ).map(inv => ({
       id: `inv-${inv.id}`,
       label: `فاتورة مبيعات #${inv.id.slice(0, 8)}`,
       subtitle: `المبلغ: ${inv.total} - التاريخ: ${new Date(inv.createdAt).toLocaleDateString('ar-EG')}`,
       category: 'الفواتير' as const,
       icon: FileText,
-      path: `/sales/history`
+      path: user?.role === 'CASHIER' ? `/pos?invoiceId=${inv.id}` : `/sales/history`
     })),
-    ...warehouses.map(wh => ({
+    ...(user?.role === 'CASHIER'
+      ? warehouses.filter(wh => allowedBranchIds.includes(wh.id))
+      : warehouses
+    ).map(wh => ({
       id: `wh-${wh.id}`,
       label: wh.name,
       subtitle: `النوع: ${wh.type === 'MAIN' ? 'رئيسي' : 'فرعي'} - كود: ${wh.code || ''}`,
@@ -170,16 +201,40 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
 
   // Filter based on search query
   const getFilteredItems = () => {
+    const hasPermission = (path: string) => {
+      if (user?.role === 'ADMIN') return true;
+      if (!user?.permissions) return false;
+      
+      if (path === '/pos') return user.permissions.pos;
+      if (path === '/') return user.permissions.dashboard;
+      if (path === '/inventory/products') return user.permissions.inventory_products || user.permissions.inventory;
+      if (path === '/inventory/branch-transfer-request') return user.permissions.inventory_branchtransfer || user.permissions.inventory;
+      if (path === '/inventory/warehouses') return user.permissions.inventory_warehouses || user.permissions.inventory;
+      if (path === '/sales/history') return user.permissions.reports_history || user.permissions.reports;
+      if (path === '/accounting/accounts') return user.permissions.accounting_chart || user.permissions.accounting;
+      if (path === '/cash/reports') return user.permissions.reports_cash || user.permissions.reports;
+      if (path === '/settings') return user.permissions.settings;
+      if (path.startsWith('/inventory/warehouses/')) return user.permissions.inventory_warehouses || user.permissions.inventory;
+      
+      return true;
+    };
+
+    const allowedStatic = staticCommands.filter(cmd => hasPermission(cmd.path));
+    const allowedDynamic = user?.role === 'CASHIER' 
+      ? dynamicCommands 
+      : dynamicCommands.filter(cmd => hasPermission(cmd.path));
+    const allAllowed = [...allowedStatic, ...allowedDynamic];
+
     if (!search.trim()) {
-      return staticCommands;
+      return allowedStatic;
     }
 
     if (search.trim() === '*') {
-      return allItems;
+      return allAllowed;
     }
 
     const cleanQuery = search.toLowerCase().trim();
-    return allItems.filter(item => 
+    return allAllowed.filter(item => 
       item.label.toLowerCase().includes(cleanQuery) || 
       (item.subtitle && item.subtitle.toLowerCase().includes(cleanQuery)) ||
       item.category.toLowerCase().includes(cleanQuery)
