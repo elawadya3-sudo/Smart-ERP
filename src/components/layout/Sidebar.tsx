@@ -326,6 +326,61 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
               </SidebarGroup>
             )}
 
+            {isModuleAllowed('sales') && hasAnyPerm('sales', 'sales_basic', 'sales_config', 'sales_docs', 'sales_approvals', 'sales_reports') && (
+              <SidebarGroup label="المبيعات" icon={Coins} activePathPrefix="/sales" routeTo="/sales" collapsed={collapsed}>
+                {hasPerm('sales', 'sales') && <SidebarItem to="/sales" icon={LayoutDashboard} label="لوحة المبيعات" collapsed={collapsed} end />}
+                
+                {(hasPerm('sales_basic', 'sales')) && (
+                  <SidebarGroup label="بيانات أساسية" icon={Package} activePathPrefix="/sales/basic" routeTo="/sales/basic/customers" collapsed={collapsed}>
+                    <SidebarItem to="/sales/basic/customers" icon={Users} label="العملاء" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/reps" icon={Users} label="مسؤول بيع" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/services" icon={Box} label="تكويد الخدمات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/sales-show" icon={FileText} label="عرض مبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/branches" icon={Building2} label="فروع المبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/quotas" icon={Layers} label="حصص مراكز البيع" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/targets" icon={BarChart3} label="مستهدف البيع" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/incentives" icon={Percent} label="حافز المبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/basic/price-lists" icon={ScrollText} label="قائمة الأسعار" collapsed={collapsed} />
+                  </SidebarGroup>
+                )}
+
+                {(hasPerm('sales_config', 'sales')) && (
+                  <SidebarGroup label="الضبط" icon={Settings} activePathPrefix="/sales/config" routeTo="/sales/config/customer-settings" collapsed={collapsed}>
+                    <SidebarItem to="/sales/config/customer-settings" icon={Users} label="بيانات العملاء" collapsed={collapsed} />
+                    <SidebarItem to="/sales/config/settings" icon={Settings} label="إعدادات المبيعات" collapsed={collapsed} />
+                  </SidebarGroup>
+                )}
+
+                {(hasPerm('sales_docs', 'sales')) && (
+                  <SidebarGroup label="مستندات" icon={FileText} activePathPrefix="/sales/docs" routeTo="/sales/docs/order" collapsed={collapsed}>
+                    <SidebarItem to="/sales/docs/order" icon={ScrollText} label="أمر بيع" collapsed={collapsed} />
+                    <SidebarItem to="/sales/docs/return" icon={ArrowRightLeft} label="مرتجع مبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/docs/recurring" icon={HistoryIcon} label="أمر بيع دوري" collapsed={collapsed} />
+                    <SidebarItem to="/sales/docs/quotations" icon={FileText} label="عروض الأسعار" collapsed={collapsed} />
+                  </SidebarGroup>
+                )}
+
+                {(hasPerm('sales_approvals', 'sales')) && (
+                  <SidebarGroup label="تصديقات" icon={ShieldCheck} activePathPrefix="/sales/approvals" routeTo="/sales/approvals/general" collapsed={collapsed}>
+                    <SidebarItem to="/sales/approvals/general" icon={ShieldCheck} label="التصديقات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/approvals/returns" icon={ShieldCheck} label="تصديقات المرتجعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/approvals/deliveries" icon={ShieldCheck} label="تصديقات التسليم" collapsed={collapsed} />
+                  </SidebarGroup>
+                )}
+
+                {(hasPerm('sales_reports', 'sales')) && (
+                  <SidebarGroup label="تقارير" icon={BarChart3} activePathPrefix="/sales/reports" routeTo="/sales/reports/orders" collapsed={collapsed}>
+                    <SidebarItem to="/sales/reports/orders" icon={BarChart3} label="تقرير أوامر المبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/reports/sales" icon={BarChart3} label="تقرير المبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/reports/profit" icon={Percent} label="اجمالي الربح" collapsed={collapsed} />
+                    <SidebarItem to="/sales/reports/customer-eval" icon={Users} label="تقرير تقييم العملاء" collapsed={collapsed} />
+                    <SidebarItem to="/sales/reports/target" icon={BarChart3} label="تقرير مستهدف المبيعات" collapsed={collapsed} />
+                    <SidebarItem to="/sales/reports/periods" icon={HistoryIcon} label="تقرير مبيعات الفترات" collapsed={collapsed} />
+                  </SidebarGroup>
+                )}
+              </SidebarGroup>
+            )}
+
             {isModuleAllowed('accounting') && hasAnyPerm('accounting', 'accounting_chart', 'accounting_costcenters', 'accounting_currencies', 'accounting_checkstages', 'accounting_taxes', 'accounting_journal', 'accounting_cash') && (
               <SidebarGroup label="الحسابات" icon={Briefcase} activePathPrefix="/accounting" routeTo="/accounting" collapsed={collapsed}>
                 {hasPerm('accounting', 'accounting') && <SidebarItem to="/accounting" icon={Briefcase} label="لوحة الحسابات" collapsed={collapsed} />}

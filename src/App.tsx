@@ -56,6 +56,12 @@ import SystemModules from './pages/superadmin/SystemModules';
 import PosCustomers from './pages/pos/PosCustomers';
 import POSReports from './pages/pos/POSReports';
 import POSSettings from './pages/pos/POSSettings';
+import SalesDashboard from './pages/sales/SalesDashboard';
+import SalesBasicData from './pages/sales/SalesBasicData';
+import SalesConfig from './pages/sales/SalesConfig';
+import SalesDocuments from './pages/sales/SalesDocuments';
+import SalesApprovals from './pages/sales/SalesApprovals';
+import SalesReports from './pages/sales/SalesReports';
 import { ThemeProvider } from './context/ThemeContext';
 import { DesktopIntegrationProvider } from './context/DesktopIntegrationContext';
 
@@ -176,6 +182,14 @@ export default function App() {
                 <Route path="currencies" element={<Currencies />} />
                 <Route path="check-stages" element={<CheckStages />} />
                 <Route path="taxes" element={<Taxes />} />
+              </Route>
+              <Route path="/sales">
+                <Route index element={<SalesDashboard />} />
+                <Route path="basic/:subview" element={<SalesBasicData />} />
+                <Route path="config/:subview" element={<SalesConfig />} />
+                <Route path="docs/:subview" element={<SalesDocuments />} />
+                <Route path="approvals/:subview" element={<SalesApprovals />} />
+                <Route path="reports/:subview" element={<SalesReports />} />
               </Route>
               <Route path="/customers" element={<Customers />} />
               <Route path="/admin/cashiers" element={<CashierManagement />} />

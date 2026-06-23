@@ -79,6 +79,13 @@ export interface UserPermissions {
   pos_open_drawer?: boolean;
   pos_close_shift?: boolean;
   pos_reprint_invoice?: boolean;
+  // Granular sales sub-pages
+  sales?: boolean;
+  sales_basic?: boolean;
+  sales_config?: boolean;
+  sales_docs?: boolean;
+  sales_approvals?: boolean;
+  sales_reports?: boolean;
 }
 
 export interface User {
