@@ -214,24 +214,7 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       )}
     >
       {/* Sidebar Header */}
-      <div className={cn(
-        'flex items-center border-b border-[var(--color-sidebar-border)] px-2.5 py-2 flex-shrink-0 bg-[var(--color-sidebar)] brightness-95',
-        collapsed ? 'justify-center' : 'justify-between'
-      )}>
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-[var(--color-primary)] text-white shadow-none">
-              <ShoppingCart className="h-4 w-4" />
-            </div>
-            <div className="text-right">
-              <h4 className="text-xs font-black text-[var(--color-sidebar-text)] brightness-125 leading-none">
-                {settings?.storeName || 'NEZAM PRO'}
-              </h4>
-              <span className="text-[7px] font-black text-[var(--color-primary)] mt-0.5 block uppercase">ERP System</span>
-            </div>
-          </div>
-        )}
-
+      <div className="flex items-center border-b border-[var(--color-sidebar-border)] px-2.5 py-2 flex-shrink-0 bg-[var(--color-sidebar)] brightness-95 justify-center">
         {/* Toggle Button */}
         <button
           onClick={onToggle}
