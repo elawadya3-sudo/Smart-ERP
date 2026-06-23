@@ -34,7 +34,7 @@ export default function PosCustomers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  
+
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
 
@@ -83,7 +83,7 @@ export default function PosCustomers() {
   const filteredCustomers = customers.filter(c => {
     const matchesBranch = (c.branchId || 'ADMIN') === selectedBranchId;
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          c.phone.includes(searchTerm);
+      c.phone.includes(searchTerm);
     return matchesBranch && matchesSearch;
   });
 

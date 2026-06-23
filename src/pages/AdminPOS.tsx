@@ -3,7 +3,7 @@
  * A streamlined POS that mirrors core functionality of POS.tsx
  * but is accessible to ADMINs without requiring an open shift.
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, CreditCard, Banknote,
   X, CheckCircle2, Package, Store, RefreshCcw, Loader2, Building2,
@@ -187,7 +187,7 @@ export default function AdminPOS() {
   const isMainBranch = selectedBranch?.type === 'MAIN' || selectedBranch?.id === '1' || selectedBranchId === 'ADMIN';
 
   // Helper to get variant stock for a specific branch
-  const getVariantBranchStock = (product: Product, variant: any) => {
+  const getVariantBranchStock = useCallback((product: Product, variant: any) => {
     const sku = variant.sku || `${product.sku || 'PROD'}-${variant.size}-${variant.color}`;
     const calculatedStock = branchStockMap[sku] || 0;
     
@@ -198,10 +198,10 @@ export default function AdminPOS() {
     }
     
     return Math.max(0, calculatedStock);
-  };
+  }, [branchStockMap, isMainBranch]);
 
   // Helper to get overall product stock for a specific branch
-  const getProductBranchStock = (product: Product) => {
+  const getProductBranchStock = useCallback((product: Product) => {
     if (product.variants && product.variants.length > 0) {
       // Sum of all its variants' branch stocks
       return product.variants.reduce((sum, v) => sum + getVariantBranchStock(product, v), 0);
@@ -213,7 +213,7 @@ export default function AdminPOS() {
       return Math.max(0, initialQty + calculatedStock);
     }
     return Math.max(0, calculatedStock);
-  };
+  }, [branchStockMap, isMainBranch, getVariantBranchStock]);
 
   const availableProducts = useMemo(() => {
     return products.map(p => ({
@@ -240,7 +240,7 @@ export default function AdminPOS() {
       );
       return hasIncoming;
     });
-  }, [products, branchStockMap, selectedBranchId, selectedBranch, transfers]);
+  }, [products, branchStockMap, selectedBranchId, selectedBranch, transfers, getProductBranchStock]);
 
   const categories = useMemo(() => {
     const cats = new Set(availableProducts.map(p => p.category).filter(Boolean));
@@ -376,6 +376,37 @@ export default function AdminPOS() {
         return i;
       }
       return { ...i, quantity: newQty, total: newQty * i.price };
+    }));
+  };
+
+  const updateDiscount = (itemSkuOrId: string, discount: number) => {
+    setCart(prev => prev.map(item => {
+      const currentKey = item.sku || item.productId;
+      if (currentKey === itemSkuOrId) {
+        const maxDiscountPercent = settings?.maxDiscountPercent ?? 100;
+        const maxDiscountAmount = item.originalPrice * (maxDiscountPercent / 100);
+        const finalDiscount = Math.min(Math.max(0, discount), maxDiscountAmount);
+
+        if (discount > maxDiscountAmount) {
+          alert(`الخصم تجاوز الحد الأقصى المسموح به في الإعدادات (${maxDiscountPercent}%)`);
+        }
+
+        const minPrice = item.minSellingPrice || 0;
+        const newPrice = item.originalPrice - finalDiscount;
+
+        if (minPrice > 0 && newPrice < minPrice) {
+          alert(`عذراً، أقل سعر بيع مسموح لهذا المنتج هو ${formatCurrency(minPrice)}`);
+          return item;
+        }
+
+        return {
+          ...item,
+          discount: finalDiscount,
+          price: newPrice,
+          total: newPrice * item.quantity
+        };
+      }
+      return item;
     }));
   };
 
@@ -667,6 +698,7 @@ export default function AdminPOS() {
                       <th className="px-3 py-1.5 text-right">المنتج</th>
                       <th className="px-3 py-1.5 text-center w-24">السعر</th>
                       <th className="px-3 py-1.5 text-center w-32">الكمية</th>
+                      <th className="px-3 py-1.5 text-center w-24">الخصم</th>
                       <th className="px-3 py-1.5 text-left w-28">الإجمالي</th>
                       <th className="px-3 py-1.5 text-center w-12">حذف</th>
                     </tr>
@@ -699,6 +731,15 @@ export default function AdminPOS() {
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
+                        </td>
+                        <td className="px-3 py-1.5 text-center">
+                          <input
+                            type="number"
+                            value={item.discount || ''}
+                            onChange={(e) => updateDiscount(item.sku || item.productId, Number(e.target.value))}
+                            className="w-16 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-center text-xs font-black text-blue-600 focus:ring-1 focus:ring-blue-500 outline-none"
+                            placeholder="0"
+                          />
                         </td>
                         <td className="px-3 py-1.5 text-left font-sans font-black text-slate-900">
                           {formatCurrency(item.total)}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -529,7 +529,7 @@ export default function POS() {
   const isMainBranch = branchWarehouse?.type === 'MAIN' || branchWarehouse?.id === '1';
 
   // Helper to get variant stock for a specific branch ID
-  const getVariantBranchStock = (product: Product, variant: ProductVariant, bId: string = selectedBranchId) => {
+  const getVariantBranchStock = useCallback((product: Product, variant: ProductVariant, bId: string = selectedBranchId) => {
     const sku = variant.sku || `${product.sku || 'PROD'}-${variant.size}-${variant.color}`;
     const branchStock = consolidatedStockMap[bId]?.[sku] || 0;
     
@@ -540,10 +540,10 @@ export default function POS() {
     }
     
     return Math.max(0, branchStock);
-  };
+  }, [consolidatedStockMap, warehouses, selectedBranchId]);
 
   // Helper to get overall product stock for a specific branch ID
-  const getProductBranchStock = (product: Product, bId: string = selectedBranchId) => {
+  const getProductBranchStock = useCallback((product: Product, bId: string = selectedBranchId) => {
     if (product.variants && product.variants.length > 0) {
       return product.variants.reduce((sum, v) => sum + getVariantBranchStock(product, v, bId), 0);
     }
@@ -555,17 +555,17 @@ export default function POS() {
       return Math.max(0, initialQty + branchStock);
     }
     return Math.max(0, branchStock);
-  };
+  }, [consolidatedStockMap, warehouses, selectedBranchId, getVariantBranchStock]);
 
   // Helper to get consolidated variant stock across all active branches
-  const getVariantConsolidatedStock = (product: Product, variant: ProductVariant) => {
+  const getVariantConsolidatedStock = useCallback((product: Product, variant: ProductVariant) => {
     return activeBranchIds.reduce((sum, bId) => sum + getVariantBranchStock(product, variant, bId), 0);
-  };
+  }, [activeBranchIds, getVariantBranchStock]);
 
   // Helper to get consolidated product stock across all active branches
-  const getProductConsolidatedStock = (product: Product) => {
+  const getProductConsolidatedStock = useCallback((product: Product) => {
     return activeBranchIds.reduce((sum, bId) => sum + getProductBranchStock(product, bId), 0);
-  };
+  }, [activeBranchIds, getProductBranchStock]);
 
   // Memoized available products list
   const availableProducts = React.useMemo(() => {
@@ -594,7 +594,7 @@ export default function POS() {
       );
       return hasIncoming;
     });
-  }, [products, consolidatedStockMap, activeBranchIds, warehouses, transfers]);
+  }, [products, consolidatedStockMap, activeBranchIds, warehouses, transfers, getProductConsolidatedStock]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
@@ -828,14 +828,15 @@ export default function POS() {
       const currentKey = item.sku || item.productId;
       if (currentKey === itemSkuOrId) {
         const maxDiscountPercent = settings?.maxDiscountPercent ?? 100;
-        const discountPercent = item.originalPrice > 0 ? (discount / item.originalPrice) * 100 : 0;
-        if (discountPercent > maxDiscountPercent) {
+        const maxDiscountAmount = item.originalPrice * (maxDiscountPercent / 100);
+        const finalDiscount = Math.min(Math.max(0, discount), maxDiscountAmount);
+
+        if (discount > maxDiscountAmount) {
           alert(`الخصم تجاوز الحد الأقصى المسموح به في الإعدادات (${maxDiscountPercent}%)`);
-          return item;
         }
 
         const minPrice = item.minSellingPrice || 0;
-        const newPrice = item.originalPrice - discount;
+        const newPrice = item.originalPrice - finalDiscount;
 
         if (minPrice > 0 && newPrice < minPrice) {
           alert(`عذراً، أقل سعر بيع مسموح لهذا المنتج هو ${formatCurrency(minPrice)}`);
@@ -844,7 +845,7 @@ export default function POS() {
 
         return {
           ...item,
-          discount: discount,
+          discount: finalDiscount,
           price: newPrice,
           total: newPrice * item.quantity
         };
