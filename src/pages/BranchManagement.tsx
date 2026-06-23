@@ -34,7 +34,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useMainStoreSettings } from '../hooks/useMainStoreSettings';
 import { useDesktop } from '../context/DesktopIntegrationContext';
 import { printReceiptHelper } from '../lib/receiptPrinter';
-import PosBreadcrumbs from '../components/layout/PosBreadcrumbs';
 
 export default function BranchManagement() {
   const { user } = useAuth();
@@ -766,44 +765,40 @@ export default function BranchManagement() {
 
   if (!selectedBranchId) {
     return (
-      <div className="space-y-4" dir="rtl">
-        <PosBreadcrumbs />
-        <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-gray-50/50 rounded-[3rem] min-h-[60vh]">
-          <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner">
-            <Store className="w-12 h-12" />
-          </div>
-          <h2 className="text-3xl font-black text-gray-900 mb-3 tracking-tight">إدارة الفرع</h2>
-          <p className="text-gray-400 font-medium mb-10 italic">يرجى اختيار الفرع لعرض التقارير والتحكم في الوردية</p>
-
-          {isLoading ? (
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
-              <p className="text-sm font-black text-gray-400 uppercase tracking-widest">جاري تحميل الفروع...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl px-4">
-              {warehouses.filter(w => (w as any).type !== 'MAIN' && w.id !== '1').map(branch => (
-                <button
-                  key={branch.id}
-                  onClick={() => setSelectedBranchId(branch.id)}
-                  className="group p-10 bg-white border-2 border-gray-100 rounded-[2.5rem] hover:border-blue-600 hover:bg-blue-50/50 hover:-translate-y-1 transition-all shadow-sm hover:shadow-xl flex flex-col items-center gap-4"
-                >
-                  <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:text-blue-600 transition-colors shadow-inner">
-                    <Store className="w-8 h-8" />
-                  </div>
-                  <span className="font-black text-lg text-gray-900">{branch.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+      <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-gray-50/50 rounded-[3rem] min-h-[60vh]" dir="rtl">
+        <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner">
+          <Store className="w-12 h-12" />
         </div>
+        <h2 className="text-3xl font-black text-gray-900 mb-3 tracking-tight">إدارة الفرع</h2>
+        <p className="text-gray-400 font-medium mb-10 italic">يرجى اختيار الفرع لعرض التقارير والتحكم في الوردية</p>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="text-sm font-black text-gray-400 uppercase tracking-widest">جاري تحميل الفروع...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl px-4">
+            {warehouses.filter(w => (w as any).type !== 'MAIN' && w.id !== '1').map(branch => (
+              <button
+                key={branch.id}
+                onClick={() => setSelectedBranchId(branch.id)}
+                className="group p-10 bg-white border-2 border-gray-100 rounded-[2.5rem] hover:border-blue-600 hover:bg-blue-50/50 hover:-translate-y-1 transition-all shadow-sm hover:shadow-xl flex flex-col items-center gap-4"
+              >
+                <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:text-blue-600 transition-colors shadow-inner">
+                  <Store className="w-8 h-8" />
+                </div>
+                <span className="font-black text-lg text-gray-900">{branch.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-8" dir="rtl">
-      <PosBreadcrumbs />
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-20"></div>

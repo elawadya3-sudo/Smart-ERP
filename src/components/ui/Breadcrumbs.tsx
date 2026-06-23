@@ -22,7 +22,9 @@ const ROUTE_LABELS: Record<string, string> = {
   'chart-of-accounts': 'دليل الحسابات',
   'cost-centers': 'مراكز التكلفة',
   'branch-management': 'إدارة الفروع والعمليات',
-  'cash-reports': 'تقارير النقدية والورديات'
+  'cash-reports': 'تقارير النقدية والورديات',
+  'admin': 'الإدارة',
+  'cashiers': 'إدارة الكاشير'
 };
 
 const getLabel = (segment: string): string => {
@@ -37,7 +39,7 @@ const getLabel = (segment: string): string => {
 
 export default function Breadcrumbs() {
   const location = useLocation();
-  const pathnames = location.pathname.split('/').filter(x => x);
+  const pathnames = location.pathname.split('/').filter(x => x && x !== 'admin');
 
   // Don't show breadcrumbs on login or POS pages
   if (location.pathname === '/login' || location.pathname.includes('/pos') || location.pathname.includes('/admin-pos')) {
