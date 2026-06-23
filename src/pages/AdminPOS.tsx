@@ -49,6 +49,9 @@ export default function AdminPOS() {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState('');
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState('');
+  const [quickCustomerAddress, setQuickCustomerAddress] = useState('');
   const customerDropdownRef = useRef<HTMLDivElement>(null);
 
   // Handle click outside for customer dropdown
@@ -1129,7 +1132,12 @@ export default function AdminPOS() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsNewCustomerModalOpen(false)}
+                  onClick={() => {
+                    setQuickCustomerName('');
+                    setQuickCustomerPhone('');
+                    setQuickCustomerAddress('');
+                    setIsNewCustomerModalOpen(false);
+                  }}
                   className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors font-bold cursor-pointer focus:outline-none"
                 >
                   ✕
@@ -1142,6 +1150,8 @@ export default function AdminPOS() {
                   <input
                     type="text"
                     id="quick-customer-name"
+                    value={quickCustomerName}
+                    onChange={e => setQuickCustomerName(e.target.value)}
                     placeholder="الاسم الكامل للعميل"
                     className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
                   />
@@ -1151,6 +1161,8 @@ export default function AdminPOS() {
                   <input
                     type="tel"
                     id="quick-customer-phone"
+                    value={quickCustomerPhone}
+                    onChange={e => setQuickCustomerPhone(e.target.value)}
                     placeholder="رقم الهاتف للتواصل والبحث"
                     className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right font-mono"
                   />
@@ -1160,6 +1172,8 @@ export default function AdminPOS() {
                   <input
                     type="text"
                     id="quick-customer-address"
+                    value={quickCustomerAddress}
+                    onChange={e => setQuickCustomerAddress(e.target.value)}
                     placeholder="عنوان العميل (اختياري)"
                     className="w-full bg-slate-50 border-none rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all text-right"
                   />
@@ -1168,7 +1182,12 @@ export default function AdminPOS() {
                 <div className="flex gap-3 pt-6 border-t border-slate-50">
                   <button
                     type="button"
-                    onClick={() => setIsNewCustomerModalOpen(false)}
+                    onClick={() => {
+                      setQuickCustomerName('');
+                      setQuickCustomerPhone('');
+                      setQuickCustomerAddress('');
+                      setIsNewCustomerModalOpen(false);
+                    }}
                     className="flex-1 py-3.5 bg-slate-50 text-slate-500 font-black rounded-2xl hover:bg-slate-100 transition-all text-xs cursor-pointer focus:outline-none"
                   >
                     إلغاء
@@ -1176,13 +1195,9 @@ export default function AdminPOS() {
                   <button
                     type="button"
                     onClick={async () => {
-                      const nameInput = document.getElementById('quick-customer-name') as HTMLInputElement;
-                      const phoneInput = document.getElementById('quick-customer-phone') as HTMLInputElement;
-                      const addressInput = document.getElementById('quick-customer-address') as HTMLInputElement;
-                      
-                      const cName = nameInput?.value?.trim();
-                      const cPhone = phoneInput?.value?.trim();
-                      const cAddress = addressInput?.value?.trim() || '';
+                      const cName = quickCustomerName.trim();
+                      const cPhone = quickCustomerPhone.trim();
+                      const cAddress = quickCustomerAddress.trim();
                       
                       if (!cName || !cPhone) {
                         alert('الرجاء إدخال اسم العميل ورقم هاتفه.');
@@ -1215,6 +1230,9 @@ export default function AdminPOS() {
                         
                         setSelectedCustomer(newCust);
                         setCustomerSearchTerm(`${cName} (${cPhone})`);
+                        setQuickCustomerName('');
+                        setQuickCustomerPhone('');
+                        setQuickCustomerAddress('');
                         setIsNewCustomerModalOpen(false);
                       } catch (err) {
                         console.error('Quick customer add failed:', err);
