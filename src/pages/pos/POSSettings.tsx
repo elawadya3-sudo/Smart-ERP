@@ -582,7 +582,7 @@ export default function POSSettings() {
       </div>
 
       {/* TABS SELECTOR */}
-      <div className="bg-white p-1 rounded-2xl border border-slate-100/80 shadow-sm inline-flex flex-wrap gap-1">
+      <div className="inline-flex items-center space-x-1 md:space-x-2 space-x-reverse bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-100/80 shadow-sm text-sm font-semibold select-none flex-wrap gap-y-2 mb-6">
         {[
           { id: 'devices', label: 'أجهزة POS', icon: Smartphone },
           { id: 'shifts', label: 'ورديات نقاط البيع', icon: Clock },
@@ -595,8 +595,8 @@ export default function POSSettings() {
             key={t.id}
             onClick={() => setActiveTab(t.id as any)}
             className={cn(
-              "px-5 py-3 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95",
-              activeTab === t.id ? "bg-[var(--color-primary)] text-white shadow-md shadow-[var(--color-primary)]/20" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+              "px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95",
+              activeTab === t.id ? "bg-[var(--color-primary)] text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             )}
           >
             <t.icon className="w-4 h-4" />

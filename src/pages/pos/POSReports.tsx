@@ -1966,7 +1966,7 @@ export default function POSReports() {
               onClick={() => { setMainTab('sales'); setGroupBy('NONE'); }}
               className={cn(
                 "px-5 py-2.5 rounded-lg text-xs font-black transition-all active:scale-95",
-                mainTab === 'sales' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                mainTab === 'sales' ? "bg-white text-[var(--color-primary)] shadow-sm" : "text-slate-500 hover:text-slate-800"
               )}
             >
               عرض المبيعات والحركات
@@ -2036,7 +2036,7 @@ export default function POSReports() {
             </button>
             <button
               onClick={() => setIsPrintPreview(true)}
-              className="bg-blue-50 border border-blue-200 text-blue-600 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 hover:bg-blue-100/60 transition-all"
+              className="bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 text-[var(--color-primary)] px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 hover:bg-[var(--color-primary)]/20 transition-all"
             >
               <Printer className="w-4 h-4" />
               طباعة / PDF
@@ -2059,7 +2059,7 @@ export default function POSReports() {
                   onClick={() => setSalesSubTab(sub.id as any)}
                   className={cn(
                     'px-5 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95',
-                    salesSubTab === sub.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/40'
+                    salesSubTab === sub.id ? 'bg-white text-[var(--color-primary)] shadow-sm' : 'text-slate-500 hover:bg-white/40'
                   )}
                 >
                   {sub.label}
